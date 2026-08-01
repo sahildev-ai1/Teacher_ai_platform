@@ -1,0 +1,33 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.35
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-multipart==0.0.9
+aiofiles==24.1.0
+httpx==0.27.2
+numpy==1.26.4
+
+# Document parsing (pure-Python / no native deps -> safe for Render free tier)
+pypdf==4.3.1
+python-docx==1.1.2
+python-pptx==1.0.2
+
+# Chunking (only the text-splitter piece of LangChain; no heavy extras pulled in)
+langchain-text-splitters==0.3.0
+
+# Embeddings: fastembed uses ONNX Runtime, NOT torch. Quantized MiniLM ~ 90MB on
+# disk, loads to well under 300MB RAM -- this is the whole reason we're not using
+# sentence-transformers/langchain-huggingface (those pull in torch, which alone
+# can blow past a 512MB Render free instance).
+fastembed==0.3.6
+
+# Export: xhtml2pdf (pure Python, ReportLab-based) instead of WeasyPrint --
+# WeasyPrint needs system Cairo/Pango/GDK-Pixbuf packages that aren't present
+# on Render's free build image and would require a custom Dockerfile.
+markdown==3.7
+xhtml2pdf==0.2.16
+
+# Optional: pedagogy-only enrichment (analogies / teaching-strategy ideas).
+# Never used for factual/source content. No-op if TAVILY_API_KEY is unset.
+tavily-python==0.5.0
