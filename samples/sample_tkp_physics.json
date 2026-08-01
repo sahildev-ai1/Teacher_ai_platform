@@ -1,0 +1,332 @@
+{
+  "document_id": "sample-physics-001",
+  "classification": {
+    "subject": "Physics",
+    "grade": "9",
+    "difficulty": "Intermediate",
+    "topic": "Motion and Newton's Laws",
+    "chapter": "Chapter 8: Force and Laws of Motion",
+    "category": "STEM",
+    "language": "English",
+    "doc_type": "text_equations"
+  },
+  "knowledge_base": {
+    "learning_objectives": [
+      "State Newton's three laws of motion",
+      "Differentiate mass and weight",
+      "Apply F=ma to solve simple numerical problems"
+    ],
+    "prerequisites": [
+      "Basic understanding of speed and velocity",
+      "Simple algebraic manipulation"
+    ],
+    "concepts": [
+      {
+        "name": "Inertia",
+        "explanation": "The tendency of an object to resist changes in its state of motion.",
+        "source_ref": "p.112"
+      },
+      {
+        "name": "Force",
+        "explanation": "A push or pull that can change an object's velocity.",
+        "source_ref": "p.113"
+      },
+      {
+        "name": "Momentum",
+        "explanation": "The product of an object's mass and velocity, p=mv.",
+        "source_ref": "p.118"
+      }
+    ],
+    "definitions": [
+      {
+        "name": "Newton's First Law",
+        "explanation": "An object remains at rest or in uniform motion unless acted on by a net external force.",
+        "source_ref": null
+      },
+      {
+        "name": "Newton's Second Law",
+        "explanation": "The rate of change of momentum of an object is proportional to the applied force: F=ma.",
+        "source_ref": null
+      }
+    ],
+    "formulae": [
+      "F = m × a",
+      "p = m × v"
+    ],
+    "keywords": [
+      "inertia",
+      "force",
+      "momentum",
+      "acceleration",
+      "friction"
+    ],
+    "examples": [
+      "A ball rolling on a frictionless surface",
+      "A car accelerating when the engine applies force"
+    ],
+    "applications": [
+      "Seatbelts and inertia in vehicle safety",
+      "Rocket propulsion using Newton's third law"
+    ],
+    "common_misconceptions": [
+      {
+        "misconception": "Heavier objects always fall faster.",
+        "correction": "In the absence of air resistance, all objects fall at the same rate regardless of mass."
+      },
+      {
+        "misconception": "A moving object needs a continuous force to keep moving.",
+        "correction": "An object in motion stays in motion unless acted upon by a net external force (Newton's First Law)."
+      }
+    ]
+  },
+  "teaching_plan": {
+    "total_periods": 3,
+    "rationale": "Three 40-minute periods: one per law, given moderate concept density and a need for worked numerical practice.",
+    "periods": [
+      {
+        "period_number": 1,
+        "title": "Newton's First Law & Inertia",
+        "duration_minutes": 40,
+        "objectives": [
+          "Explain inertia with real-world examples"
+        ],
+        "concepts_covered": [
+          "Inertia",
+          "Newton's First Law"
+        ],
+        "pacing_notes": "Spend extra time on misconception that motion requires continuous force."
+      },
+      {
+        "period_number": 2,
+        "title": "Newton's Second Law & F=ma",
+        "duration_minutes": 40,
+        "objectives": [
+          "Apply F=ma to solve problems"
+        ],
+        "concepts_covered": [
+          "Force",
+          "Newton's Second Law"
+        ],
+        "pacing_notes": "Include 3-4 worked numerical examples."
+      },
+      {
+        "period_number": 3,
+        "title": "Momentum & Newton's Third Law",
+        "duration_minutes": 40,
+        "objectives": [
+          "Relate momentum to force and motion"
+        ],
+        "concepts_covered": [
+          "Momentum"
+        ],
+        "pacing_notes": "Connect to real-world safety applications."
+      }
+    ]
+  },
+  "period_content": [
+    {
+      "period_number": 1,
+      "entry_ticket": "Why does a passenger lurch forward when a bus stops suddenly?",
+      "teacher_script": "Begin by asking students to push a book across the desk and observe it slowing down...",
+      "blackboard_notes": "Inertia = resistance to change in motion. Newton's 1st Law: no net force -> no change in velocity.",
+      "classroom_activity_summary": "Coin-and-card inertia demonstration.",
+      "checkpoint_questions": [
+        "Why does the coin drop into the glass when the card is flicked?",
+        "Give one everyday example of inertia."
+      ],
+      "exit_ticket": "Explain in your own words why seatbelts are necessary.",
+      "homework": "Find 3 examples of inertia at home and describe them.",
+      "mentor_moment": "Astronauts experience near-zero friction in space, which is why Newton's first law feels almost visible there."
+    },
+    {
+      "period_number": 2,
+      "entry_ticket": "If you push a shopping cart with double the force, what happens to its acceleration?",
+      "teacher_script": "Introduce F=ma with a simple cart-and-weights demonstration...",
+      "blackboard_notes": "F = m × a. Units: Force (N), mass (kg), acceleration (m/s^2).",
+      "classroom_activity_summary": "Measure acceleration of a cart under different applied forces.",
+      "checkpoint_questions": [
+        "A 2kg object accelerates at 3 m/s^2. Find the force.",
+        "What happens to acceleration if mass doubles and force stays constant?"
+      ],
+      "exit_ticket": "Solve: F=10N, m=5kg, find a.",
+      "homework": "Complete 5 F=ma numerical problems from the textbook.",
+      "mentor_moment": "Formula One engineers use F=ma every day to balance engine power against car mass."
+    },
+    {
+      "period_number": 3,
+      "entry_ticket": "Why does a rocket move forward by pushing gas backward?",
+      "teacher_script": "Connect momentum conservation to Newton's third law using a balloon-rocket demo...",
+      "blackboard_notes": "p = m × v. Every action has an equal and opposite reaction.",
+      "classroom_activity_summary": "Balloon rocket demonstration of action-reaction pairs.",
+      "checkpoint_questions": [
+        "State Newton's third law in your own words.",
+        "Why does a gun recoil when fired?"
+      ],
+      "exit_ticket": "Give one example of momentum conservation.",
+      "homework": "Write a short paragraph connecting all three laws using one real-world scenario.",
+      "mentor_moment": "Rocket scientist tip: every space launch is a live demonstration of Newton's third law."
+    }
+  ],
+  "activities": [
+    {
+      "period_number": 1,
+      "title": "Coin and Card Inertia Trick",
+      "type": "demonstration",
+      "duration_minutes": 10,
+      "materials": [
+        "Index card",
+        "Coin",
+        "Glass"
+      ],
+      "instructions": [
+        "Place the card on top of the glass.",
+        "Place the coin on the card.",
+        "Flick the card horizontally and observe the coin drop into the glass."
+      ],
+      "success_criteria": [
+        "Student can explain why the coin doesn't move with the card."
+      ]
+    },
+    {
+      "period_number": 2,
+      "title": "Cart Force Lab",
+      "type": "experiment",
+      "duration_minutes": 15,
+      "materials": [
+        "Toy cart",
+        "Weights",
+        "Stopwatch",
+        "Ruler"
+      ],
+      "instructions": [
+        "Attach different weights to the cart.",
+        "Apply a constant pulling force.",
+        "Measure time to travel 1m and calculate acceleration."
+      ],
+      "success_criteria": [
+        "Students correctly calculate acceleration from measured data."
+      ]
+    },
+    {
+      "period_number": 3,
+      "title": "Balloon Rocket Race",
+      "type": "demonstration",
+      "duration_minutes": 12,
+      "materials": [
+        "Balloons",
+        "String",
+        "Straws",
+        "Tape"
+      ],
+      "instructions": [
+        "Thread a straw onto a string across the room.",
+        "Tape an inflated balloon to the straw.",
+        "Release and observe the balloon's motion."
+      ],
+      "success_criteria": [
+        "Students identify the action and reaction forces involved."
+      ]
+    }
+  ],
+  "assessments": [
+    {
+      "period_number": 1,
+      "mcqs": [
+        {
+          "question": "Newton's First Law is also known as the Law of:",
+          "options": [
+            "Inertia",
+            "Gravity",
+            "Momentum",
+            "Energy"
+          ],
+          "correct_index": 0,
+          "explanation": "Newton's First Law describes inertia."
+        }
+      ],
+      "written_questions": [
+        {
+          "question": "Explain why a passenger tends to fall forward when a car suddenly brakes.",
+          "type": "short",
+          "answer_key": "Due to inertia, the passenger's body continues moving forward even as the car stops.",
+          "rubric": "1 pt for mentioning inertia, 1 pt for correct direction of motion."
+        }
+      ]
+    },
+    {
+      "period_number": 2,
+      "mcqs": [
+        {
+          "question": "If force is doubled and mass stays constant, acceleration:",
+          "options": [
+            "Halves",
+            "Doubles",
+            "Stays the same",
+            "Becomes zero"
+          ],
+          "correct_index": 1,
+          "explanation": "F=ma means a is directly proportional to F."
+        }
+      ],
+      "written_questions": [
+        {
+          "question": "A 4kg object experiences a net force of 20N. Find its acceleration.",
+          "type": "numerical",
+          "answer_key": "a = F/m = 20/4 = 5 m/s^2",
+          "rubric": "1 pt formula, 1 pt correct substitution, 1 pt correct answer with units."
+        }
+      ]
+    },
+    {
+      "period_number": 3,
+      "mcqs": [
+        {
+          "question": "Newton's Third Law states that forces occur in:",
+          "options": [
+            "Pairs",
+            "Triples",
+            "Isolation",
+            "Random combinations"
+          ],
+          "correct_index": 0,
+          "explanation": "Every action has an equal and opposite reaction, forming a pair."
+        }
+      ],
+      "written_questions": [
+        {
+          "question": "Explain how a rocket accelerates in space where there is nothing to push against.",
+          "type": "long",
+          "answer_key": "The rocket pushes exhaust gas backward, and by Newton's third law the gas pushes the rocket forward; no external medium is needed.",
+          "rubric": "2 pts for correctly applying Newton's third law, 1 pt for clarity."
+        }
+      ]
+    }
+  ],
+  "learning_gaps": [
+    {
+      "misconception": "A moving object needs a continuous force to keep moving.",
+      "diagnostic_question": "Ask: 'What happens to a hockey puck sliding on frictionless ice with no force applied?'",
+      "severity": "high",
+      "remedial_action": "Use frictionless-surface thought experiments and video simulations to isolate the role of friction."
+    },
+    {
+      "misconception": "Heavier objects fall faster than lighter ones.",
+      "diagnostic_question": "Ask: 'Which falls faster: a hammer or a feather, on the Moon?'",
+      "severity": "medium",
+      "remedial_action": "Show the Apollo 15 hammer-feather drop video and discuss the role of air resistance."
+    }
+  ],
+  "validation": {
+    "passed": true,
+    "issues": [
+      {
+        "stage": "stage3_knowledge_extraction",
+        "severity": "info",
+        "message": "All concepts traced to source page references."
+      }
+    ],
+    "hallucination_score": 0.08,
+    "schema_ok": true,
+    "consistency_ok": true
+  }
+}

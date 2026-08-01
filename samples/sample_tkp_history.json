@@ -1,0 +1,384 @@
+{
+  "document_id": "sample-history-002",
+  "classification": {
+    "subject": "History",
+    "grade": "8",
+    "difficulty": "Intermediate",
+    "topic": "The Indian Freedom Struggle: Non-Cooperation Movement",
+    "chapter": "Chapter 3: Nationalism in India",
+    "category": "Humanities",
+    "language": "English",
+    "doc_type": "mostly_text"
+  },
+  "knowledge_base": {
+    "learning_objectives": [
+      "Explain the causes of the Non-Cooperation Movement",
+      "Analyze Gandhi's role in mobilizing mass participation",
+      "Evaluate the movement's impact on colonial rule and later struggles"
+    ],
+    "prerequisites": [
+      "Basic timeline of British colonial rule in India",
+      "Understanding of the Jallianwala Bagh massacre"
+    ],
+    "concepts": [
+      {
+        "name": "Satyagraha",
+        "explanation": "A philosophy of nonviolent resistance developed by Gandhi, rooted in truth and moral force.",
+        "source_ref": "p.45"
+      },
+      {
+        "name": "Non-Cooperation",
+        "explanation": "A strategy of withdrawing cooperation from British institutions -- schools, courts, titles, and goods.",
+        "source_ref": "p.47"
+      },
+      {
+        "name": "Chauri Chaura incident",
+        "explanation": "A violent clash in 1922 that led Gandhi to call off the Non-Cooperation Movement.",
+        "source_ref": "p.51"
+      }
+    ],
+    "definitions": [
+      {
+        "name": "Khilafat Movement",
+        "explanation": "A movement by Indian Muslims to pressure the British government to preserve the Ottoman Caliph's authority, allied with the Non-Cooperation Movement.",
+        "source_ref": null
+      },
+      {
+        "name": "Swaraj",
+        "explanation": "Self-rule; the central political goal invoked during the movement.",
+        "source_ref": null
+      }
+    ],
+    "formulae": [],
+    "keywords": [
+      "Satyagraha",
+      "Non-Cooperation",
+      "Khilafat",
+      "Swaraj",
+      "Chauri Chaura",
+      "boycott"
+    ],
+    "examples": [
+      "Students leaving government schools to join national schools",
+      "Lawyers giving up legal practice"
+    ],
+    "applications": [
+      "Later inspiration for the Civil Disobedience Movement",
+      "Influence on nonviolent movements worldwide, e.g. the US Civil Rights Movement"
+    ],
+    "common_misconceptions": [
+      {
+        "misconception": "The Non-Cooperation Movement succeeded in ending British rule immediately.",
+        "correction": "The movement was withdrawn in 1922 after Chauri Chaura; full independence came only in 1947 after further movements."
+      },
+      {
+        "misconception": "The movement was supported uniformly across all social and religious groups.",
+        "correction": "Participation varied by region and group, and alliances like the Khilafat movement had complex, sometimes strained, coordination with Congress."
+      }
+    ]
+  },
+  "teaching_plan": {
+    "total_periods": 4,
+    "rationale": "Four 40-minute periods to allow narrative depth (a Humanities topic benefits from discussion time) plus a dedicated period for evaluating long-term impact.",
+    "periods": [
+      {
+        "period_number": 1,
+        "title": "Causes and the Idea of Satyagraha",
+        "duration_minutes": 40,
+        "objectives": [
+          "Explain the causes leading to the movement"
+        ],
+        "concepts_covered": [
+          "Satyagraha"
+        ],
+        "pacing_notes": "Use primary-source excerpts of Gandhi's writing to ground the discussion."
+      },
+      {
+        "period_number": 2,
+        "title": "The Movement Unfolds: Boycotts and Khilafat",
+        "duration_minutes": 40,
+        "objectives": [
+          "Describe key actions of the movement"
+        ],
+        "concepts_covered": [
+          "Non-Cooperation",
+          "Khilafat Movement"
+        ],
+        "pacing_notes": "Emphasize the range of participants -- students, lawyers, workers."
+      },
+      {
+        "period_number": 3,
+        "title": "Chauri Chaura and the Movement's Withdrawal",
+        "duration_minutes": 40,
+        "objectives": [
+          "Analyze why Gandhi called off the movement"
+        ],
+        "concepts_covered": [
+          "Chauri Chaura incident"
+        ],
+        "pacing_notes": "Use a structured debate on whether withdrawal was the right call."
+      },
+      {
+        "period_number": 4,
+        "title": "Legacy and Long-Term Impact",
+        "duration_minutes": 40,
+        "objectives": [
+          "Evaluate the movement's influence on later struggles"
+        ],
+        "concepts_covered": [
+          "Swaraj"
+        ],
+        "pacing_notes": "Connect to Civil Disobedience Movement and global nonviolent movements."
+      }
+    ]
+  },
+  "period_content": [
+    {
+      "period_number": 1,
+      "entry_ticket": "What does it mean to resist something without using violence?",
+      "teacher_script": "Open by reading a short excerpt where Gandhi describes Satyagraha as 'truth-force'...",
+      "blackboard_notes": "Satyagraha = truth + firmness. Causes: Rowlatt Act, Jallianwala Bagh, economic hardship.",
+      "classroom_activity_summary": "Primary source excerpt analysis in pairs.",
+      "checkpoint_questions": [
+        "What is Satyagraha?",
+        "Name two causes of the Non-Cooperation Movement."
+      ],
+      "exit_ticket": "In one sentence, define Satyagraha in your own words.",
+      "homework": "Interview a family member about any story of resistance they know, nonviolent or otherwise.",
+      "mentor_moment": "Martin Luther King Jr. later cited Gandhi's Satyagraha as a direct influence on the US Civil Rights Movement."
+    },
+    {
+      "period_number": 2,
+      "entry_ticket": "Would you give up your job for a political cause? Why or why not?",
+      "teacher_script": "Present a timeline of boycotts -- schools, courts, foreign cloth -- and connect to the Khilafat alliance...",
+      "blackboard_notes": "Non-Cooperation = withdrawal of support from British institutions. Khilafat = allied Muslim movement.",
+      "classroom_activity_summary": "Role-play: students take on roles of a lawyer, student, and mill worker deciding whether to join.",
+      "checkpoint_questions": [
+        "Name three things Indians were asked to boycott.",
+        "What was the Khilafat Movement?"
+      ],
+      "exit_ticket": "Would you have joined the boycott? Justify your answer.",
+      "homework": "List 3 modern examples of boycotts as a form of protest.",
+      "mentor_moment": "Many students who left government schools during this period went on to found some of India's earliest national universities."
+    },
+    {
+      "period_number": 3,
+      "entry_ticket": "Should a leader stop a movement if some supporters turn violent?",
+      "teacher_script": "Describe the Chauri Chaura incident and Gandhi's decision to withdraw the movement...",
+      "blackboard_notes": "Chauri Chaura (1922): violent clash -> Gandhi withdraws movement to preserve nonviolent principle.",
+      "classroom_activity_summary": "Structured classroom debate: 'Was withdrawing the movement the right decision?'",
+      "checkpoint_questions": [
+        "What happened at Chauri Chaura?",
+        "Why did Gandhi withdraw the movement?"
+      ],
+      "exit_ticket": "State one argument for and one against Gandhi's decision.",
+      "homework": "Write a 100-word opinion piece on Gandhi's decision to withdraw the movement.",
+      "mentor_moment": "Gandhi's willingness to halt a mass movement over a single violent incident remains one of history's most debated leadership decisions."
+    },
+    {
+      "period_number": 4,
+      "entry_ticket": "Do movements 'fail' if their immediate demand isn't met?",
+      "teacher_script": "Trace how the ideas and organizational tactics of Non-Cooperation carried into the Civil Disobedience Movement...",
+      "blackboard_notes": "Legacy: mass mobilization tactics, Swaraj as ongoing goal, influence beyond India.",
+      "classroom_activity_summary": "Timeline-building activity connecting 1920-22 events to 1930s movements.",
+      "checkpoint_questions": [
+        "What is Swaraj?",
+        "Name one later movement influenced by Non-Cooperation."
+      ],
+      "exit_ticket": "Was the Non-Cooperation Movement a success or failure? Justify briefly.",
+      "homework": "Research one nonviolent movement from another country influenced by Gandhi's methods.",
+      "mentor_moment": "Nelson Mandela cited both Gandhi's philosophy and Indian nationalist strategy as influences on his own thinking, even while ultimately choosing a different path."
+    }
+  ],
+  "activities": [
+    {
+      "period_number": 1,
+      "title": "Primary Source Circle",
+      "type": "discussion",
+      "duration_minutes": 15,
+      "materials": [
+        "Printed excerpt of Gandhi's writing on Satyagraha"
+      ],
+      "instructions": [
+        "Divide students into groups of 4.",
+        "Each group reads the excerpt and identifies 2 key phrases.",
+        "Groups share interpretations with the class."
+      ],
+      "success_criteria": [
+        "Each group can explain Satyagraha in their own words."
+      ]
+    },
+    {
+      "period_number": 2,
+      "title": "Role-Play: To Join or Not to Join",
+      "type": "role_play",
+      "duration_minutes": 20,
+      "materials": [
+        "Role cards (lawyer, student, mill worker, government clerk)"
+      ],
+      "instructions": [
+        "Assign roles to small groups.",
+        "Each group discusses whether their character would join the boycott.",
+        "Groups present their decision and reasoning."
+      ],
+      "success_criteria": [
+        "Students articulate at least one real consequence of joining/not joining."
+      ]
+    },
+    {
+      "period_number": 3,
+      "title": "Chauri Chaura Debate",
+      "type": "discussion",
+      "duration_minutes": 20,
+      "materials": [
+        "Debate prompt cards",
+        "Timer"
+      ],
+      "instructions": [
+        "Split class into two sides: 'withdrawal was right' vs 'withdrawal was wrong'.",
+        "Each side prepares 3 arguments.",
+        "Hold a timed structured debate."
+      ],
+      "success_criteria": [
+        "Each side presents evidence-based arguments, not just opinions."
+      ]
+    },
+    {
+      "period_number": 4,
+      "title": "Legacy Timeline Build",
+      "type": "demonstration",
+      "duration_minutes": 15,
+      "materials": [
+        "Timeline strip",
+        "Sticky notes"
+      ],
+      "instructions": [
+        "Provide a blank timeline from 1919 to 1947.",
+        "Students place sticky notes for key events and connect them with arrows showing influence.",
+        "Discuss the resulting timeline as a class."
+      ],
+      "success_criteria": [
+        "Timeline correctly sequences events and shows at least one causal link."
+      ]
+    }
+  ],
+  "assessments": [
+    {
+      "period_number": 1,
+      "mcqs": [
+        {
+          "question": "Satyagraha is best described as a philosophy of:",
+          "options": [
+            "Armed rebellion",
+            "Nonviolent resistance",
+            "Economic sanctions only",
+            "Diplomatic negotiation"
+          ],
+          "correct_index": 1,
+          "explanation": "Satyagraha is Gandhi's philosophy of nonviolent resistance."
+        }
+      ],
+      "written_questions": [
+        {
+          "question": "Explain two causes of the Non-Cooperation Movement.",
+          "type": "short",
+          "answer_key": "Any two of: Rowlatt Act, Jallianwala Bagh massacre, economic hardship from WWI, disappointment with the Montagu-Chelmsford reforms.",
+          "rubric": "1 pt per correctly explained cause."
+        }
+      ]
+    },
+    {
+      "period_number": 2,
+      "mcqs": [
+        {
+          "question": "Which movement was allied with Non-Cooperation?",
+          "options": [
+            "Khilafat Movement",
+            "Quit India Movement",
+            "Salt March",
+            "Swadeshi Movement"
+          ],
+          "correct_index": 0,
+          "explanation": "The Khilafat Movement was allied with Non-Cooperation in 1920-22."
+        }
+      ],
+      "written_questions": [
+        {
+          "question": "Describe one social group that participated in the boycotts and how.",
+          "type": "short",
+          "answer_key": "E.g. Students left government schools to join national schools; lawyers gave up legal practice.",
+          "rubric": "1 pt for correct group, 1 pt for correct description of action."
+        }
+      ]
+    },
+    {
+      "period_number": 3,
+      "mcqs": [
+        {
+          "question": "The Non-Cooperation Movement was withdrawn after:",
+          "options": [
+            "The Salt March",
+            "The Chauri Chaura incident",
+            "The Quit India Movement",
+            "Independence in 1947"
+          ],
+          "correct_index": 1,
+          "explanation": "Gandhi withdrew the movement following the violence at Chauri Chaura in 1922."
+        }
+      ],
+      "written_questions": [
+        {
+          "question": "Do you agree with Gandhi's decision to withdraw the movement? Justify your view with evidence.",
+          "type": "long",
+          "answer_key": "Answers may vary; should reference Gandhi's commitment to nonviolence and the incident's context.",
+          "rubric": "1 pt clear position, 2 pts supporting evidence, 1 pt acknowledging counter-argument."
+        }
+      ]
+    },
+    {
+      "period_number": 4,
+      "mcqs": [
+        {
+          "question": "'Swaraj' refers to:",
+          "options": [
+            "Foreign trade policy",
+            "Self-rule",
+            "A British reform act",
+            "A type of nonviolent protest"
+          ],
+          "correct_index": 1,
+          "explanation": "Swaraj means self-rule, the central goal of the movement."
+        }
+      ],
+      "written_questions": [
+        {
+          "question": "Explain how the Non-Cooperation Movement influenced later independence movements in India or elsewhere.",
+          "type": "long",
+          "answer_key": "Should mention influence on Civil Disobedience Movement and/or global nonviolent movements (e.g. US Civil Rights Movement).",
+          "rubric": "1 pt correct example, 1 pt explanation of influence, 1 pt clarity."
+        }
+      ]
+    }
+  ],
+  "learning_gaps": [
+    {
+      "misconception": "The Non-Cooperation Movement directly ended British rule.",
+      "diagnostic_question": "Ask: 'In what year did India actually gain independence, and how does that compare to when this movement ended?'",
+      "severity": "high",
+      "remedial_action": "Build a clear timeline distinguishing this movement (1920-22) from eventual independence (1947)."
+    },
+    {
+      "misconception": "All Indians participated in the movement in the same way.",
+      "diagnostic_question": "Ask: 'Would a factory owner and a mill worker have had the same reasons to join or not join?'",
+      "severity": "medium",
+      "remedial_action": "Use the role-play activity to surface differing regional, economic, and religious perspectives."
+    }
+  ],
+  "validation": {
+    "passed": true,
+    "issues": [],
+    "hallucination_score": 0.11,
+    "schema_ok": true,
+    "consistency_ok": true
+  }
+}
