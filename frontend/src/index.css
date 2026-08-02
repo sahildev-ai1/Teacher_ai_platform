@@ -150,7 +150,104 @@ input[type="text"], textarea, select {
 .pill.warning { background: #f7e6d8; color: var(--chalk-red); }
 .pill.ok { background: #e2ead9; color: #3d6b3f; }
 
+/* --- Landing hero: intro copy above the upload card --- */
+.hero {
+  max-width: 680px;
+  margin: 0 auto 1.6rem;
+  text-align: center;
+}
+.hero .eyebrow {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--board-ink);
+  background: var(--board);
+  padding: 0.32rem 0.85rem;
+  border-radius: 12px;
+  margin-bottom: 1.1rem;
+}
+.hero h1 {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  line-height: 1.22;
+  margin: 0 0 0.9rem;
+  color: var(--board);
+}
+.hero p.lede {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--paper-ink);
+  opacity: 0.82;
+  margin: 0 auto;
+  max-width: 540px;
+}
+
+/* --- How it works: 4-step row --- */
+.how-it-works {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1.8rem auto;
+  max-width: 900px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.how-step {
+  flex: 1 1 190px;
+  max-width: 220px;
+  text-align: left;
+  padding: 0 0.5rem;
+}
+.how-step .step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--board);
+  color: var(--board-ink);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-bottom: 0.55rem;
+}
+.how-step h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin: 0 0 0.3rem;
+  color: var(--board);
+}
+.how-step p {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* --- Feature badges row --- */
+.feature-badges {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 0 0 2rem;
+}
+.feature-badge {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.01em;
+  padding: 0.4rem 0.75rem;
+  border-radius: 12px;
+  background: #eef1ea;
+  color: var(--board);
+  border: 1px solid var(--rule);
+}
+
 .dropzone {
+  display: block;
+  width: 100%;
   border: 2px dashed var(--rule); border-radius: 6px; padding: 2.5rem 1.5rem;
   text-align: center; cursor: pointer; background: #fff;
 }
