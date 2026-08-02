@@ -10,8 +10,20 @@ const STAGES = [
   { key: "stage8_learning_gaps", label: "8 · Learning Gaps" },
 ];
 
+function PeriodDetails({ periodNumber, summary, defaultOpen, children }) {
+  return (
+    <details open={defaultOpen} style={{ marginBottom: "0.9rem", border: "1px solid var(--rule)", borderRadius: 4, padding: "0.6rem 0.9rem", background: "#fff" }}>
+      <summary style={{ cursor: "pointer", fontWeight: 600, color: "var(--board)" }}>
+        Period {periodNumber} {summary ? `— ${summary}` : ""}
+      </summary>
+      <div style={{ marginTop: "0.7rem" }}>{children}</div>
+    </details>
+  );
+}
+
 function StageContentView({ stageKey, content }) {
   if (!content) return null;
+
   if (stageKey === "stage4_teaching_plan") {
     return (
       <div>
@@ -25,38 +37,76 @@ function StageContentView({ stageKey, content }) {
       </div>
     );
   }
+
   if (stageKey === "stage5_classroom_content") {
-    return content.periods?.map((pc) => (
-      <div key={pc.period_number} style={{ marginBottom: "1rem" }}>
-        <strong>Period {pc.period_number}</strong>
+    const periods = content.periods || [];
+    return periods.map((pc) => (
+      <PeriodDetails key={pc.period_number} periodNumber={pc.period_number} defaultOpen={periods.length <= 2}>
         <p><em>Entry ticket:</em> {pc.entry_ticket}</p>
         <p><em>Teacher script:</em> {pc.teacher_script}</p>
+        <p><em>Blackboard notes:</em> {pc.blackboard_notes}</p>
+        <p><em>Classroom activity:</em> {pc.classroom_activity_summary}</p>
+        <p><em>Checkpoint questions:</em></p>
+        <ul>{pc.checkpoint_questions?.map((q, i) => <li key={i}>{q}</li>)}</ul>
+        <p><em>Exit ticket:</em> {pc.exit_ticket}</p>
+        <p><em>Homework:</em> {pc.homework}</p>
         <p><em>Mentor moment:</em> {pc.mentor_moment}</p>
-      </div>
+      </PeriodDetails>
     ));
   }
+
   if (stageKey === "stage6_activities") {
-    return content.activities?.map((a, i) => (
-      <div key={i} style={{ marginBottom: "1rem" }}>
-        <strong>Period {a.period_number} — {a.title}</strong> ({a.type}, {a.duration_minutes} min)
+    const activities = content.activities || [];
+    return activities.map((a, i) => (
+      <PeriodDetails key={i} periodNumber={a.period_number}
+                     summary={`${a.title} (${a.type}, ${a.duration_minutes} min)`}
+                     defaultOpen={activities.length <= 2}>
+        <p><em>Materials:</em> {a.materials?.join(", ")}</p>
+        <p><em>Instructions:</em></p>
         <ol>{a.instructions?.map((s, j) => <li key={j}>{s}</li>)}</ol>
-      </div>
+        <p><em>Success criteria:</em></p>
+        <ul>{a.success_criteria?.map((s, j) => <li key={j}>{s}</li>)}</ul>
+      </PeriodDetails>
     ));
   }
+
   if (stageKey === "stage7_assessments") {
-    return content.assessments?.map((a, i) => (
-      <div key={i} style={{ marginBottom: "1rem" }}>
-        <strong>Period {a.period_number}</strong>
-        <p>{a.mcqs?.length || 0} MCQs, {a.written_questions?.length || 0} written questions</p>
-      </div>
+    const assessments = content.assessments || [];
+    return assessments.map((a, i) => (
+      <PeriodDetails key={i} periodNumber={a.period_number}
+                     summary={`${a.mcqs?.length || 0} MCQs, ${a.written_questions?.length || 0} written questions`}
+                     defaultOpen={assessments.length <= 2}>
+        {a.mcqs?.map((mcq, qi) => (
+          <div key={`mcq-${qi}`} style={{ marginBottom: "0.9rem" }}>
+            <p style={{ marginBottom: "0.3rem" }}><strong>{qi + 1}. {mcq.question}</strong></p>
+            <ul style={{ listStyle: "none", paddingLeft: "1rem", margin: "0 0 0.3rem" }}>
+              {mcq.options?.map((opt, oi) => (
+                <li key={oi} style={{ color: oi === mcq.correct_index ? "#3d6b3f" : "inherit", fontWeight: oi === mcq.correct_index ? 600 : 400 }}>
+                  {String.fromCharCode(97 + oi)}) {opt}{oi === mcq.correct_index ? "  ✓" : ""}
+                </li>
+              ))}
+            </ul>
+            <p className="muted" style={{ fontSize: "0.85rem", margin: 0 }}>{mcq.explanation}</p>
+          </div>
+        ))}
+        {a.written_questions?.map((wq, qi) => (
+          <div key={`wq-${qi}`} style={{ marginBottom: "0.9rem" }}>
+            <p style={{ marginBottom: "0.3rem" }}><strong>({wq.type})</strong> {wq.question}</p>
+            <p className="muted" style={{ margin: "0 0 0.15rem" }}><em>Answer key:</em> {wq.answer_key}</p>
+            <p className="muted" style={{ margin: 0 }}><em>Rubric:</em> {wq.rubric}</p>
+          </div>
+        ))}
+      </PeriodDetails>
     ));
   }
+
   if (stageKey === "stage8_learning_gaps") {
     return content.gaps?.map((g, i) => (
-      <div key={i} style={{ marginBottom: "0.7rem" }}>
+      <div key={i} style={{ marginBottom: "0.9rem" }}>
         <span className={`pill ${g.severity === "high" ? "warning" : "ok"}`}>{g.severity}</span>{" "}
         <strong>{g.misconception}</strong>
-        <p className="muted">{g.remedial_action}</p>
+        <p className="muted" style={{ margin: "0.3rem 0" }}><em>Diagnostic question:</em> {g.diagnostic_question}</p>
+        <p className="muted" style={{ margin: 0 }}><em>Remedial action:</em> {g.remedial_action}</p>
       </div>
     ));
   }
