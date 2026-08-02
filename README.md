@@ -52,9 +52,14 @@ similarity search (`app/vector_store.py`) — fast at chapter-sized chunk counts
 low hundreds of rows).
 
 ### Why fastembed instead of sentence-transformers?
-`sentence-transformers` pulls in `torch`, which alone can exceed a 512MB free-tier RAM
-budget. `fastembed` runs the same MiniLM model on ONNX Runtime — no torch, ~90MB on
-disk, comfortably under budget alongside FastAPI/uvicorn. See `app/vector_store.py`.
+The embedding model itself (`sentence-transformers/all-MiniLM-L6-v2`) is still a
+public, non-gated Hugging Face model — that part didn't change. What changed is the
+*inference stack*: `sentence-transformers` pulls in `torch`, which alone can exceed a
+512MB free-tier RAM budget. `fastembed` downloads the same model in ONNX format and
+runs it on ONNX Runtime instead — no torch, ~90MB on disk, comfortably under budget
+alongside FastAPI/uvicorn. No `HF_TOKEN` is required (public repo, anonymous download);
+`HF_TOKEN` in `.env.example` is an optional hedge against Hugging Face's anonymous rate
+limit, not a requirement. See `app/vector_store.py`.
 
 ### Why xhtml2pdf instead of WeasyPrint?
 WeasyPrint needs system Cairo/Pango/GDK-Pixbuf packages not present on Render's default

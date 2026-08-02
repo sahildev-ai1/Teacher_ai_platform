@@ -18,6 +18,9 @@ services:
         value: gemma4:cloud
       - key: TAVILY_API_KEY
         sync: false
+      - key: HF_TOKEN
+        sync: false
+        value: ""  # optional -- see backend/.env.example
       - key: FRONTEND_ORIGIN
         value: https://your-frontend.onrender.com
       - key: SQLITE_PATH
