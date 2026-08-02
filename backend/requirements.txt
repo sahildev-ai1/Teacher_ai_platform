@@ -20,7 +20,7 @@ langchain-text-splitters==0.3.0
 # disk, loads to well under 300MB RAM -- this is the whole reason we're not using
 # sentence-transformers/langchain-huggingface (those pull in torch, which alone
 # can blow past a 512MB Render free instance).
-fastembed==0.3.6
+fastembed==0.8.0
 
 # Export: xhtml2pdf (pure Python, ReportLab-based) instead of WeasyPrint --
 # WeasyPrint needs system Cairo/Pango/GDK-Pixbuf packages that aren't present
