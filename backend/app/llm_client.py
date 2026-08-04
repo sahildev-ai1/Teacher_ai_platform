@@ -13,6 +13,7 @@ Thin, provider-agnostic LLM layer.
 """
 import json
 import logging
+import re
 import time
 from typing import Optional, List, Type, TypeVar
 
@@ -25,6 +26,60 @@ logger = logging.getLogger("teacher_ai.llm")
 logging.basicConfig(level=logging.INFO)
 
 T = TypeVar("T", bound=BaseModel)
+
+# Appended to the system prompt whenever json_mode=True. This exists because
+# math/science chapters reliably make the model write LaTeX-style notation
+# (\frac, \Delta, \times, \sqrt...) straight into JSON string values -- and a
+# backslash followed by anything other than ", \, /, b, f, n, r, t, or a
+# \uXXXX escape is invalid JSON, which breaks json.loads(). Telling the model
+# up front to avoid LaTeX commands prevents most of these before they happen;
+# _fix_invalid_json_escapes() below is the safety net for when it slips up
+# anyway.
+_JSON_SAFETY_INSTRUCTION = (
+    "\n\nIMPORTANT: Reply with a single valid JSON object/array and nothing else "
+    "(no markdown fences, no prose before or after). Every backslash inside a "
+    "JSON string must be a valid JSON escape (\\\", \\\\, \\n, \\t, etc.). If you "
+    "need to write mathematical notation, use plain text instead of LaTeX "
+    "commands -- write 'a^2 + b^2 = c^2', 'sqrt(x)', 'pi', 'Delta H', 'x_1', "
+    "'a/b' rather than \\frac, \\Delta, \\times, \\sqrt, \\left(/\\right), etc., "
+    "since LaTeX backslash commands are not valid JSON escapes and will break "
+    "parsing."
+)
+
+# Any backslash NOT starting a valid JSON escape (\", \\, \/, \b, \f, \n, \r,
+# \t, or \uXXXX with exactly 4 hex digits) is invalid JSON. This is done as an
+# explicit linear scan rather than a regex substitution because a naive
+# regex mis-handles RUNS of already-valid escapes -- e.g. an escaped literal
+# backslash "\\\\" in the JSON text (4 raw chars = 2 valid \\ pairs) gets its
+# second pair misread as a new escape starting mid-run if you scan backslash
+# by backslash instead of consuming whole escapes as you go.
+_VALID_SINGLE_ESCAPES = set('"\\/bfnrt')
+_HEX_DIGITS = set('0123456789abcdefABCDEF')
+
+
+def _fix_invalid_json_escapes(text: str) -> str:
+    out = []
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch != "\\":
+            out.append(ch)
+            i += 1
+            continue
+        nxt = text[i + 1] if i + 1 < n else ""
+        if nxt in _VALID_SINGLE_ESCAPES:
+            out.append(text[i:i + 2])
+            i += 2
+        elif nxt == "u" and i + 6 <= n and all(c in _HEX_DIGITS for c in text[i + 2:i + 6]):
+            out.append(text[i:i + 6])
+            i += 6
+        else:
+            # Invalid escape (e.g. a raw LaTeX command like \Delta, \pi,
+            # \sqrt) -- double the backslash so it becomes a literal
+            # backslash instead of a broken escape sequence.
+            out.append("\\\\")
+            i += 1
+    return "".join(out)
 
 
 class LLMError(RuntimeError):
@@ -56,6 +111,8 @@ def chat(
     content. If json_mode is True, asks the model to respond with JSON only and
     strips markdown code fences before returning."""
     messages = []
+    if json_mode:
+        system = (system or "") + _JSON_SAFETY_INSTRUCTION
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
@@ -92,19 +149,39 @@ def chat(
 
 
 def chat_json(prompt: str, system: Optional[str] = None, model: Optional[str] = None) -> dict:
-    """Calls chat() in JSON mode and parses the result, with one repair retry
-    if the model returns malformed JSON."""
+    """Calls chat() in JSON mode and parses the result. Layered recovery:
+    1. Parse as-is.
+    2. Locally fix invalid backslash escapes (the LaTeX-in-JSON problem --
+       see _fix_invalid_json_escapes) and retry parsing, no extra API call.
+    3. Ask the model to repair its own output.
+    4. Apply the local escape-fix to the repaired output too, since the model
+       tends to reproduce the same LaTeX habit on retry rather than fix it.
+    """
     raw = chat(prompt, system=system, model=model, json_mode=True)
     try:
         return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        logger.warning("json_parse_failed error=%s -- trying local escape fix", exc)
+
+    fixed = _fix_invalid_json_escapes(raw)
+    try:
+        return json.loads(fixed)
     except json.JSONDecodeError:
-        repair_prompt = (
-            "The following text was supposed to be valid JSON but failed to parse. "
-            "Return ONLY corrected, valid JSON with the same information, no prose, "
-            f"no markdown fences:\n\n{raw}"
-        )
-        raw2 = chat(repair_prompt, model=model, json_mode=True)
+        pass
+
+    repair_prompt = (
+        "The following text was supposed to be valid JSON but failed to parse. "
+        "Return ONLY corrected, valid JSON with the same information, no prose, "
+        "no markdown fences. If it contains LaTeX math commands (\\frac, \\Delta, "
+        "\\times, \\sqrt, etc.), rewrite that notation in plain text instead "
+        "(e.g. 'a/b', 'Delta H', 'x times y', 'sqrt(x)') since those backslashes "
+        f"are not valid JSON escapes:\n\n{raw}"
+    )
+    raw2 = chat(repair_prompt, model=model, json_mode=True)
+    try:
         return json.loads(raw2)
+    except json.JSONDecodeError:
+        return json.loads(_fix_invalid_json_escapes(raw2))
 
 
 def _strip_code_fence(text: str) -> str:
