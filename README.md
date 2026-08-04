@@ -1,199 +1,643 @@
 # Teacher Knowledge Package Studio
 
-Converts a raw educational document (PDF / DOCX / PPTX / TXT) into a classroom-ready
-**Teacher Knowledge Package (TKP)**: a multi-period teaching plan, per-period classroom
-content, activities, assessments, and a learning-gap analysis — grounded in the source
-document and reviewed interactively by the teacher before publishing.
+Turns a raw educational document (PDF / DOCX / PPTX / TXT) into a classroom-ready
+**Teacher Knowledge Package (TKP)** — a multi-period teaching plan, per-period classroom
+content, activities, assessments, and a learning-gap analysis, all grounded in the
+source document and reviewed interactively by the teacher before publishing.
 
-Built for a **free-tier deploy** (e.g. Render's free instance, 512MB RAM): no torch, no
-separate vector database process, no system-level native dependencies.
-
----
-
-## Architecture
-
-```
-                         ┌─────────────────────────────────────────┐
-                         │              React Frontend              │
-                         │  Upload → SSE progress → Stage Workspace  │
-                         └───────────────────┬───────────────────────┘
-                                              │ REST + SSE
-                         ┌───────────────────▼───────────────────────┐
-                         │              FastAPI Backend               │
-                         │                                             │
-   AUTO-RUN (background) │  Stage 1  Document Intelligence             │
-   ──────────────────────┤  Stage 2  Educational Classification        │
-   streamed via SSE       │  Stage 3  Knowledge Extraction (map-reduce) │
-                         │                                             │
-   INTERACTIVE, gated     │  Stage 4  Teaching Planner      ┐          │
-   one-at-a-time, each    │  Stage 5  Classroom Content      │ chat +   │
-   requires approval      │  Stage 6  Activities             │ regen +  │
-   before the next        │  Stage 7  Assessments            │ approve  │
-   unlocks                │  Stage 8  Learning Gap Analysis ┘          │
-                         │                                             │
-   AUTO-RUN (sync)        │  Stage 9  Validation (schema / hallucination│
-                         │            / completeness / consistency)   │
-                         │  Stage 10 Publishing (JSON/MD/HTML/PDF/DOCX)│
-                         └───────────────────┬───────────────────────┘
-                                              │
-                    ┌─────────────────────────▼─────────────────────────┐
-                    │                  SQLite (ONE file)                  │
-                    │  documents · stage_outputs · chat_messages ·        │
-                    │  pipeline_runs · embedding_chunks (float32 blobs)   │
-                    └───────────────────────────────────────────────────┘
-```
-
-**Why one SQLite file instead of Postgres + a vector DB?** This is a single-tenant,
-single-document-at-a-time app by design (see "Single-document lock" below), running on
-a resource-capped instance. A second persistence system (Chroma, Pinecone, Postgres)
-buys nothing here and costs RAM/disk/build-time. Embeddings are stored as raw float32
-byte blobs in a `embedding_chunks` table; retrieval is an in-process numpy cosine
-similarity search (`app/vector_store.py`) — fast at chapter-sized chunk counts (tens to
-low hundreds of rows).
-
-### Why fastembed instead of sentence-transformers?
-The embedding model itself (`sentence-transformers/all-MiniLM-L6-v2`) is still a
-public, non-gated Hugging Face model — that part didn't change. What changed is the
-*inference stack*: `sentence-transformers` pulls in `torch`, which alone can exceed a
-512MB free-tier RAM budget. `fastembed` downloads the same model in ONNX format and
-runs it on ONNX Runtime instead — no torch, ~90MB on disk, comfortably under budget
-alongside FastAPI/uvicorn. No `HF_TOKEN` is required (public repo, anonymous download);
-`HF_TOKEN` in `.env.example` is an optional hedge against Hugging Face's anonymous rate
-limit, not a requirement. See `app/vector_store.py`.
-
-### Why xhtml2pdf instead of WeasyPrint?
-WeasyPrint needs system Cairo/Pango/GDK-Pixbuf packages not present on Render's default
-Python build image (would require a custom Dockerfile). `xhtml2pdf` is pure Python
-(ReportLab-based) and needs nothing extra.
-
-### AI orchestration pattern
-Custom, explicit multi-stage pipeline (`app/orchestrator.py`, `app/stages_extraction.py`,
-`app/stages_generation.py`) rather than a LangChain agent executor — the workflow is a
-known, fixed 10-stage DAG with a human-in-the-loop checkpoint in the middle, which is
-more reliably (and more debuggably) expressed as explicit Python functions with a state
-machine (`StageOutput.status`: pending → generated → approved) than as an autonomous
-agent deciding its own next action. LangChain's text splitter is used for chunking;
-LangChain is **not** used as a chat/agent framework here, deliberately.
-
-- **Stage 2 (classification)** is answered from a *compressed global view* of the whole
-  document (headings + head/tail + sampled middle chunks) in one call — not via
-  similarity retrieval, since "what is this document?" isn't a retrieval query.
-- **Stage 3 (knowledge extraction)** is **map-reduce**: a fast model extracts partial
-  knowledge per chunk-batch, then the main model merges/deduplicates everything. Scales
-  to a full chapter without truncating content.
-- Every generation call goes through `llm_client.chat_structured()`, which validates
-  the model's JSON against the exact Pydantic schema for that stage and, on a mismatch,
-  sends the model its own validation errors and retries (up to 2 extra calls) before
-  giving up with a clean `502` — an open ~30B model producing deeply nested JSON *will*
-  occasionally drop a field, so this turned a real failure mode into a self-healing one
-  (verified in `test_pipeline_e2e.py`, which deliberately breaks the first classification
-  response to prove the retry recovers).
-- **Stages 4-8** are interactive: generate → teacher reviews in a chat panel → feedback
-  triggers a revision (not a restart) → approve unlocks the next stage. This is the
-  "hard single-document, sequential checkpoint" design.
-- **Stage 9 (validation)** checks: schema adherence, hallucination/grounding (cosine
-  similarity of generated *factual* content against the source's embedded chunks —
-  mentor moments and activities are excluded from this check by design, since they're
-  meant to bring in outside analogies), completeness (every planned concept traces back
-  to the knowledge base), and cross-stage period-numbering consistency.
-
-### Single-document lock + delete/reset
-`settings.enforce_single_document` (on by default) rejects a new upload with `409` while
-any document row exists. The **"Delete & Start New"** button in the header (or
-`DELETE /api/documents/{id}`) wipes the uploaded file, all stage outputs, chat history,
-embedding vectors, and exported files for that document — after which a new upload is
-allowed. This keeps the free-tier instance's memory/disk footprint bounded to one
-document's worth of state at a time.
-
-### Bonus features implemented
-- **RAG & traceability**: Stage 9's hallucination score is a real embedding-similarity
-  check against the source document, not a heuristic; concepts carry `source_ref`.
-- **Multi-agent-style separation**: each stage is an independently callable, independently
-  testable function/module with a narrow prompt contract — not one mega-prompt.
-- **Performance/cost optimization**: map-reduce batching in Stage 3, a cheaper/faster
-  model for map steps vs. the main model for synthesis, single in-process vector store.
-- **Observability**: structured logging with latency/attempt counts on every LLM call
-  (`app/llm_client.py`), plus exponential-backoff retries and one JSON-repair retry.
-- **Multilingual-ready**: `Classification.language` is extracted per-document; prompts
-  don't hardcode English.
-- Optional **Tavily web search** (`TAVILY_API_KEY`) enriches Stages 4-6 with teaching
-  strategy / analogy ideas — explicitly labeled as secondary/non-factual in the prompt,
-  per the client's grounding rule (secondary sources may shape *pedagogy*, never *facts*).
+This document explains **everything**: what each file does, how the files call each
+other, the full request/response flow for every screen, and the state machines behind
+the "one document at a time, sequential approval" design. Flowcharts are given as
+**PlantUML source** (see [Rendering the diagrams](#rendering-the-diagrams)), each
+followed by its rendered diagram, and every screen is illustrated with a real
+screenshot of the deployed app.
 
 ---
 
-## Setup (local)
+## Table of Contents
 
-### Verifying the pipeline without an Ollama key
-`backend/test_pipeline_e2e.py` runs the **entire** pipeline — upload, Stage 1-3
-auto-run, all of Stages 4-8 (including a chat-feedback regeneration and a
-deliberately-broken model response to exercise the schema-repair retry),
-Stage 9 validation, Stage 10 publishing, and every export format — against a
-mocked LLM and mocked embeddings, so you can confirm the orchestration logic
-end to end before spending a single real API call:
-```bash
-cd backend
-pip install -r requirements.txt
-PYTHONPATH=. python3 test_pipeline_e2e.py   # -> "ALL CHECKS PASSED."
+1. [What this project does](#what-this-project-does)
+2. [Rendering the diagrams](#rendering-the-diagrams)
+3. [System architecture](#system-architecture)
+4. [The complete user flow](#the-complete-user-flow) — screen by screen, file by file
+5. [The 10-stage pipeline, as a flowchart](#the-10-stage-pipeline-as-a-flowchart)
+6. [State machines](#state-machines)
+7. [End-to-end sequence diagram](#end-to-end-sequence-diagram)
+8. [Backend file-by-file reference](#backend-file-by-file-reference)
+9. [Backend module dependency diagram](#backend-module-dependency-diagram)
+10. [Frontend file-by-file reference](#frontend-file-by-file-reference)
+11. [Data model reference](#data-model-reference)
+12. [API reference](#api-reference)
+13. [Setup & running locally](#setup--running-locally)
+14. [Testing](#testing)
+15. [Deploying to Render](#deploying-to-render)
+16. [Known limitations / next steps](#known-limitations--next-steps)
+
+---
+
+## What this project does
+
+A teacher uploads a chapter/paper/slide deck. The system:
+
+1. **Reads it** (Stage 1) — parses PDF/DOCX/PPTX/TXT, detects headings/tables/figures.
+2. **Understands it** (Stage 2-3) — classifies subject/grade/difficulty/topic, then
+   extracts learning objectives, concepts, definitions, formulae, examples, and common
+   misconceptions, all *grounded in the source document*.
+3. **Plans the teaching of it** (Stage 4) — decides how many periods it needs and what
+   each period should cover, adapting to content volume and grade level rather than
+   forcing a fixed template.
+4. **Builds the classroom materials** (Stages 5-8) — full teacher scripts, activities,
+   assessments (MCQs + written questions with rubrics), and a misconception/learning-gap
+   analysis — with the teacher able to give chat feedback and have any stage revised
+   before approving it and moving to the next.
+5. **Validates and packages it** (Stage 9-10) — checks the output isn't hallucinated,
+   flags gaps, and exports a `TeacherKnowledgePackage.json` plus Markdown/HTML/PDF/DOCX
+   versions.
+
+Everything runs on a **free-tier-friendly** stack: no torch, no separate vector-database
+process, no system-level native dependencies (see the main `README.md`'s "why fastembed",
+"why xhtml2pdf" sections for the reasoning).
+
+---
+
+## Rendering the diagrams
+
+Every diagram below is **PlantUML source** in a fenced ` ```plantuml ` block. To render
+one:
+
+- **Fastest**: paste the block into <https://www.plantuml.com/plantuml/uml/> (official
+  online renderer) and it draws the image instantly.
+- **VS Code**: install the "PlantUML" extension (jebbs.plantuml), open a `.puml` file
+  with the block's contents, and press `Alt+D` to preview.
+- **Locally**: `pip install plantuml` (needs a Java runtime) then
+  `plantuml diagram.puml` to get a `.png`.
+
+Rendered versions of every diagram, plus screenshots of the running app, are already
+included in `images/` and linked inline throughout this document — you don't need to
+render anything yourself unless you want to regenerate them from the PlantUML source
+above.
+
+---
+
+## System architecture
+
+```plantuml
+@startuml SystemArchitecture
+skinparam componentStyle rectangle
+actor Teacher
+
+package "Frontend (React + Vite)" {
+  [UploadPanel]
+  [ProgressStream]
+  [StageWorkspace]
+  [ExportMenu]
+}
+
+package "Backend (FastAPI)" {
+  [routers.py\n(API Gateway)] as Routers
+  [orchestrator.py] as Orchestrator
+  [stages_extraction.py] as StagesExtraction
+  [stages_generation.py] as StagesGeneration
+  [validator.py] as Validator
+  [publisher.py] as Publisher
+  [llm_client.py] as LLMClient
+  [vector_store.py] as VectorStore
+  [document_intelligence.py] as DocIntel
+}
+
+database "SQLite\n(documents, stage_outputs,\nchat_messages, embedding_chunks,\npipeline_runs)" as DB
+
+cloud "Ollama Cloud / Local\n(chat model)" as Ollama
+cloud "Tavily (optional)\npedagogy search" as Tavily
+cloud "Hugging Face Hub\n(fastembed model download)" as HF
+
+Teacher --> UploadPanel
+Teacher --> StageWorkspace
+UploadPanel --> Routers : REST (multipart upload)
+ProgressStream --> Routers : SSE stream
+StageWorkspace --> Routers : REST (generate/chat/approve/publish)
+ExportMenu --> Routers : REST (export)
+
+Routers --> Orchestrator
+Routers --> StagesGeneration
+Routers --> Validator
+Routers --> Publisher
+Orchestrator --> DocIntel
+Orchestrator --> StagesExtraction
+Orchestrator --> VectorStore
+StagesExtraction --> LLMClient
+StagesGeneration --> LLMClient
+Validator --> VectorStore
+
+LLMClient --> Ollama
+LLMClient --> Tavily
+VectorStore --> HF : model download (first boot)
+VectorStore --> DB
+Routers --> DB
+Orchestrator --> DB
+@enduml
 ```
 
-### Backend
+![System architecture diagram](images/f1.svg)
+
+🖼️ **Deployed on Render** — live service logs showing the app booting, binding to its
+port, and serving real `/api/documents/...` traffic:
+![Render deployment dashboard](images/b1.JPG)
+
+---
+
+## The complete user flow
+
+This is the exact path a request takes, screen by screen, naming the real
+file/function that handles each step. Read this alongside the
+[sequence diagram](#end-to-end-sequence-diagram) below.
+
+### 1. Landing — is there already a document?
+- **Frontend**: `App.jsx` mounts, calls `api.getActive()` → `GET /api/documents/active`.
+- **Backend**: `routers.get_active_document()` checks `db.query(Document).first()`.
+- If a document exists: `App.jsx` renders either `ProgressStream` (still on Stage 1-3)
+  or `StageWorkspace` (Stage 4+). If not: renders `UploadPanel`.
+
+🖼️ **The landing state** — no document active yet, the `UploadPanel` dropzone and the
+optional clarifying-question fields:
+![Landing screenshot](images/1.JPG)
+
+### 2. Upload
+- **Frontend**: `UploadPanel.jsx` — drag-and-drop file input + doc-type-hint dropdown
+  + 3 optional clarifying-question fields (grade, teaching style, time constraints).
+  On submit, builds a `FormData` and calls `api.upload()`.
+- **Backend**: `routers.upload_document()`:
+  1. Rejects with `409` if `enforce_single_document` and a `Document` row already
+     exists (the single-document lock).
+  2. Saves the file to `UPLOAD_DIR`, creates a `Document` row (`db_models.Document`).
+  3. Stashes the upfront teaching preferences into the `PipelineRun.message` field
+     (as JSON) so Stage 4 can read them later without a second round trip.
+  4. Queues `orchestrator.run_intelligence_pipeline()` as a `BackgroundTasks` job and
+     immediately returns `{document_id, status: "processing"}`.
+
+🖼️ **A file staged for upload** — `ncert-books-for-class-9-maths.pdf`, with the
+document-type hint set to "Text with Equations" and grade set to "Grade 9":
+![Upload screenshot](images/2.JPG)
+
+### 3. Stages 1-3 run automatically, progress streams live
+- **Frontend**: `ProgressStream.jsx` opens an `EventSource` to
+  `GET /api/documents/{id}/stream` (SSE) the moment a document ID exists.
+- **Backend**: `routers.stream_progress()` polls the `PipelineRun` row every ~0.8s and
+  pushes `{state, progress, current_stage, message}` whenever it changes.
+- Meanwhile, in the background, `orchestrator.run_intelligence_pipeline()` runs:
+  - `document_intelligence.parse_document()` → **Stage 1**
+  - `stages_extraction.classify_document()` → **Stage 2**
+  - `stages_extraction.extract_knowledge()` → **Stage 3** (map-reduce over chunks)
+  - `vector_store.ingest_chunks()` — embeds the source chunks for later grounding checks
+  - Sets `Document.status = "ready_for_planning"` and `PipelineRun.state = "waiting_user"`
+- The moment the frontend sees `waiting_user`, it closes the SSE connection and
+  switches to `StageWorkspace`.
+
+🖼️ **`ProgressStream.jsx` live** — Stage 1 (Document Intelligence) parsing the upload:
+![Progress screenshot — Stage 1](images/3.JPG)
+
+🖼️ Stage 3 (Knowledge Extraction) mid-run, map-reduce batching over the source chunks:
+![Progress screenshot — Stage 3](images/4.JPG)
+
+### 4. Stages 4-8 — the interactive loop
+- **Frontend**: `StageWorkspace.jsx` fetches `GET /api/documents/{id}` on mount (full
+  document + classification + knowledge base + every `StageOutput` so far), works out
+  the first stage that isn't `approved` yet, and renders the **stage stepper**.
+- For the current stage:
+  - No content yet → shows a **Generate** button →
+    `POST /stages/{stage}/generate` → `routers._run_stage_generation()` → the matching
+    function in `stages_generation.py` → `llm_client.chat_structured()` (validates the
+    model's JSON against the exact Pydantic schema, with repair retries) → saves a
+    `StageOutput` row (`status="generated"`).
+  - Content exists → renders it via `StageContentView` (full MCQs, teacher scripts,
+    activities, etc. — this is what got fixed to show full detail instead of just
+    counts), plus a **chat box**.
+  - Teacher types feedback → `POST /chat/{stage}` → `routers.send_chat()` logs the
+    message, then calls the *same* stage-generation function with `feedback=message`
+    and `existing=<previous draft>` so it **revises**, not restarts.
+  - Teacher clicks **Approve** → `POST /stages/{stage}/approve` → `StageOutput.status =
+    "approved"` → `orchestrator.next_stage_after()` tells the frontend which stage
+    unlocks next.
+- `orchestrator.is_stage_unlocked()` is checked on **every** generate/chat call
+  server-side too — the frontend's stepper isn't the only thing enforcing the gate.
+
+🖼️ **Stage 4 — Teaching Plan, before generation.** The stage stepper (`4 · Teaching
+Plan` through `8 · Learning Gaps`) with the **Generate** button:
+![Stage workspace screenshot — Generate](images/5.JPG)
+
+🖼️ Stage 4's generated output — a full, period-by-period teaching plan with rationale,
+durations, and objectives per period:
+![Stage workspace screenshot — Teaching Plan generated](images/6.JPG)
+
+🖼️ The chat feedback loop in action — the teacher asked to *"make period 2 more formula
+and activity based"*, the model revised the plan in place, and **Approve & Continue**
+unlocks the next stage:
+![Stage workspace screenshot — chat feedback and approve](images/7.JPG)
+
+🖼️ Stage 5 — Classroom Content generating (`StageContentView` shows a **Generating...**
+state while `stages_generation.py` calls the LLM):
+![Stage workspace screenshot — Classroom Content generating](images/8.JPG)
+
+🖼️ Stage 5's generated output — a full per-period breakdown (entry ticket, teacher
+script, blackboard notes, classroom activity, checkpoint questions, exit ticket):
+![Stage workspace screenshot — Classroom Content generated](images/9.JPG)
+
+🖼️ Stage 7 — Assessments, one collapsible panel per period (`4 MCQs, 3 written
+questions` each, expand any panel to see the full MCQ with the correct answer
+highlighted):
+![Assessment view screenshot](images/10.JPG)
+
+### 5. Publish (Stages 9-10)
+- Once all 5 interactive stages are `approved`, `StageWorkspace.jsx` shows **Run
+  Validation & Publish** → `POST /documents/{id}/publish`.
+- **Backend**: `routers.publish()`:
+  1. Re-validates every stage is actually approved.
+  2. Calls `validator.validate_package()` → **Stage 9** (schema, hallucination-via-
+     embedding-similarity, completeness, cross-stage consistency).
+  3. Calls `publisher.build_package()` → **Stage 10** — assembles the final
+     `TeacherKnowledgePackage` and writes `TeacherKnowledgePackage.json` to
+     `EXPORT_DIR/{document_id}/`.
+  4. Returns the full package (including the validation report) to the frontend.
+- **Frontend** shows the validation summary (passed/failed, hallucination score) and
+  renders `ExportMenu.jsx`.
+
+🖼️ Stage 8 (Learning Gaps) approved, followed by the **Publish Teacher Knowledge
+Package** panel — validation `PASSED`, hallucination risk score `0.379`, and all five
+export/download buttons (JSON, Markdown, HTML, PDF, Word):
+![Publish screenshot](images/11.JPG)
+
+### 6. Export
+- **Frontend**: `ExportMenu.jsx` is just 5 `<a>` links to
+  `GET /api/documents/{id}/export?format=...`.
+- **Backend**: `routers.export_package()` reads the saved `TeacherKnowledgePackage.json`,
+  and for anything other than `format=json` calls `publisher.render_markdown()` then
+  chains into `render_html()` / `render_pdf()` / `render_docx()` as needed.
+
+### 7. Delete & start new
+- **Frontend**: the header's **Delete & Start New** button (visible whenever a document
+  is active) → confirms → `DELETE /api/documents/{id}`.
+- **Backend**: `routers.delete_document()` removes the uploaded file, the export
+  folder, every `EmbeddingChunk`/`ChatMessage`/`StageOutput`/`PipelineRun` row, and the
+  `Document` row itself — after which a new upload is allowed again (the single-
+  document lock resets).
+
+---
+
+## The 10-stage pipeline, as a flowchart
+
+```plantuml
+@startuml PipelineFlow
+start
+:Teacher uploads document\n(+ optional grade/style/time hints);
+if (Another document already active?) then (yes)
+  :409 Conflict --\n"delete current document first";
+  stop
+else (no)
+endif
+
+partition "AUTO-RUN (background task, streamed via SSE)" {
+  :Stage 1 - Document Intelligence\n(parse PDF/DOCX/PPTX/TXT, detect structure);
+  :Stage 2 - Educational Classification\n(compressed whole-doc context -> subject/grade/topic/etc);
+  :Stage 3 - Knowledge Extraction\n(map-reduce over chunks -> objectives/concepts/definitions/...);
+  :Embed chunks into vector store\n(for later grounding checks);
+}
+
+:PipelineRun.state = "waiting_user";
+
+partition "INTERACTIVE (teacher-gated, one stage at a time)" {
+  :Stage 4 - Teaching Planner;
+  if (Teacher sends chat feedback?) then (yes)
+    :Regenerate with feedback\n(existing draft revised, not restarted);
+    note right: loops until happy
+  endif
+  :Teacher approves Stage 4;
+  :Stage 5 - Classroom Content;
+  :Teacher approves Stage 5;
+  :Stage 6 - Activities;
+  :Teacher approves Stage 6;
+  :Stage 7 - Assessments;
+  :Teacher approves Stage 7;
+  :Stage 8 - Learning Gap Analysis;
+  :Teacher approves Stage 8;
+}
+
+partition "AUTO-RUN (synchronous, on publish click)" {
+  :Stage 9 - Validation\n(schema + hallucination + completeness + consistency);
+  :Stage 10 - Publishing\n(assemble TeacherKnowledgePackage.json,\nrender MD/HTML/PDF/DOCX);
+}
+
+:Teacher downloads exports;
+stop
+@enduml
+```
+
+![10-stage pipeline flowchart](images/f2.svg)
+
+---
+
+## State machines
+
+```plantuml
+@startuml StateMachines
+
+state "Document.status" as DocState {
+  [*] --> uploaded
+  uploaded --> ready_for_planning : Stage 1-3 auto-run completes
+  ready_for_planning --> published : Stage 9/10 (publish) completes
+  uploaded --> error : pipeline exception
+  published --> [*] : DELETE /documents/{id}\n(single-doc lock reset)
+  uploaded --> [*] : DELETE /documents/{id}
+}
+
+state "StageOutput.status\n(per stage, Stages 4-8)" as StageState {
+  [*] --> pending
+  pending --> generated : POST .../generate
+  generated --> generated : POST .../generate\n(with feedback -- revises in place)
+  generated --> approved : POST .../approve
+  approved --> [*]
+}
+
+@enduml
+```
+
+![State machines diagram](images/f3.svg)
+
+Why this matters: `orchestrator.is_stage_unlocked()` is purely a function of these two
+state machines — Stage 4 unlocks once `Document.status` reaches `ready_for_planning`;
+every stage after that unlocks only once the **previous** stage's `StageOutput.status`
+is `approved`. There's no separate "workflow engine" — the state machine *is* the gate.
+
+---
+
+## End-to-end sequence diagram
+
+```plantuml
+@startuml EndToEndSequence
+actor Teacher
+participant "React\nFrontend" as FE
+participant "FastAPI\nrouters.py" as API
+participant "orchestrator.py" as Orch
+participant "stages_extraction.py\n/ stages_generation.py" as Stages
+participant "llm_client.py" as LLM
+participant "vector_store.py" as VS
+participant "validator.py\npublisher.py" as VP
+database "SQLite" as DB
+
+Teacher -> FE : Upload document + hints
+FE -> API : POST /api/documents/upload
+API -> DB : create Document row
+API -> Orch : BackgroundTasks.add_task(run_intelligence_pipeline)
+API --> FE : {document_id, status: "processing"}
+
+FE -> API : GET /api/documents/{id}/stream (SSE)
+activate Orch
+Orch -> Stages : parse_document() [Stage 1]
+Orch -> Stages : classify_document() [Stage 2]
+Stages -> LLM : chat_structured(Classification)
+Orch -> Stages : extract_knowledge() [Stage 3, map-reduce]
+Stages -> LLM : chat_structured(KnowledgeBase) x N
+Orch -> VS : ingest_chunks() (embed + store)
+Orch -> DB : update Document + PipelineRun\n(state=waiting_user)
+deactivate Orch
+API --> FE : SSE: {state: "waiting_user"}
+
+loop Stages 4-8 (teacher-gated)
+  Teacher -> FE : click Generate
+  FE -> API : POST /stages/{stage}/generate
+  API -> Stages : generate_*(...)
+  Stages -> LLM : chat_structured(schema)
+  LLM --> Stages : validated Pydantic object
+  API -> DB : save StageOutput (status=generated)
+  API --> FE : content JSON
+  FE --> Teacher : render in StageWorkspace
+
+  opt Teacher gives feedback
+    Teacher -> FE : type feedback + Send
+    FE -> API : POST /chat/{stage}
+    API -> Stages : generate_*(feedback=..., existing=...)
+    Stages -> LLM : chat_structured(schema)
+    API -> DB : save ChatMessage + updated StageOutput
+  end
+
+  Teacher -> FE : click Approve
+  FE -> API : POST /stages/{stage}/approve
+  API -> DB : StageOutput.status = approved
+end
+
+Teacher -> FE : click Publish
+FE -> API : POST /publish
+API -> VP : validate_package() [Stage 9]
+VP -> VS : max_similarity_to_source() (hallucination check)
+API -> VP : build_package() [Stage 10]
+API -> DB : save TeacherKnowledgePackage.json to disk
+API --> FE : final package + validation report
+
+Teacher -> FE : click Download (any format)
+FE -> API : GET /export?format=...
+API -> VP : render_markdown/html/pdf/docx()
+API --> FE : file bytes
+@enduml
+```
+
+![End-to-end sequence diagram](images/f4.svg)
+
+---
+
+## Backend file-by-file reference
+
+All paths are under `backend/app/`.
+
+| File | What it does | Talks to |
+|---|---|---|
+| `__init__.py` | Empty — makes `app` a Python package. | — |
+| `config.py` | `Settings` (pydantic-settings) — every env-driven tunable (Ollama host/model, chunk size, embedding model, single-doc-lock flag, Tavily/HF keys). Exposes a module-level `settings` singleton everything else imports. | Read by nearly every other file. |
+| `database.py` | SQLAlchemy engine + `SessionLocal` + `Base`. `get_db()` is the FastAPI dependency every route uses; `init_db()` creates tables at startup. | `config.py` |
+| `db_models.py` | ORM tables: `Document`, `StageOutput`, `ChatMessage`, `EmbeddingChunk`, `PipelineRun`. This *is* the state machine described above. | `database.py` |
+| `schemas.py` | Every Pydantic contract: `Classification`, `KnowledgeBase` (+`Concept`, `Misconception`), `TeachingPlan` (+`PeriodPlan`), `PeriodContent`, `Activity`, `Assessment` (+`MCQ`, `WrittenQuestion`), `LearningGap` (+`LearningGapsResponse`), `ValidationReport` (+`ValidationIssue`), and the top-level `TeacherKnowledgePackage`. These are used for (a) prompting the LLM what shape to return, (b) validating what it actually returned, and (c) the API response shape. | Imported everywhere generation/validation happens. |
+| `document_intelligence.py` | **Stage 1.** `parse_pdf/docx/pptx/txt()` each return a `ParsedDocument` (full text + detected headings/tables/figures + chunked text). `infer_file_type()` maps a filename to a parser. `parse_document()` is the single entry point `orchestrator.py` calls. | `config.py` (chunk size/overlap) |
+| `llm_client.py` | The only file that talks to Ollama. `chat()` — retry-with-backoff raw call. `chat_json()` — JSON-mode + code-fence stripping + one repair-on-parse-failure retry. `chat_structured()` — validates the JSON against a given Pydantic schema, and on a validation error, sends the model *its own errors* and retries (up to 2x) before raising `LLMError`. `pedagogy_search()` — optional Tavily call, returns `[]` silently if `TAVILY_API_KEY` isn't set. | `config.py` |
+| `vector_store.py` | The lightweight, no-separate-database RAG layer. `embed_texts()` — fastembed (ONNX, no torch). `ingest_chunks()` — embeds + stores a document's chunks as float32 blobs in `EmbeddingChunk` rows. `retrieve()` — top-k cosine similarity search. `max_similarity_to_source()` — used by Stage 9's hallucination check. | `config.py`, `db_models.py` |
+| `stages_extraction.py` | **Stages 2-3.** `classify_document()` builds a *compressed whole-document* context (headings + head/tail + sampled middle chunks) and calls `chat_structured(..., Classification)` — deliberately NOT a retrieval query, since "what is this document?" is a global question. `extract_knowledge()` is map-reduce: `_map_extract()` mines each chunk-batch with the fast model, `_reduce_extract()` merges/dedupes everything with the main model. | `document_intelligence.py`, `llm_client.py`, `schemas.py`, `config.py` |
+| `stages_generation.py` | **Stages 4-8.** One `generate_*()` function per stage, each accepting an optional `feedback` + `existing` pair so chat-driven revision works. Calls `pedagogy_search()` for Stages 4-6 only, always labeled as secondary/non-factual in the prompt. | `llm_client.py`, `schemas.py`, `config.py` |
+| `validator.py` | **Stage 9.** `validate_package()` runs four checks and returns one `ValidationReport`: `_check_schema` (re-validated construction), `_check_consistency` (period numbering matches across all stages), `_check_completeness` (every planned concept traces to the knowledge base), `_check_hallucination` (embedding similarity of factual content against the source — mentor moments/activities are deliberately excluded). | `schemas.py`, `vector_store.py`, `config.py` |
+| `publisher.py` | **Stage 10.** `build_package()` assembles the final `TeacherKnowledgePackage`. `render_markdown()` is the single source of truth for the human-readable "Teacher Guide" — `render_html()`, `render_pdf()` (xhtml2pdf), and `render_docx()` (a minimal Markdown→python-docx walker) all build on top of it. | `schemas.py` |
+| `orchestrator.py` | Glue between Stage 1-3 (auto) and Stage 4-8 (gated). `run_intelligence_pipeline()` is the `BackgroundTasks` target — runs Stages 1-3 end to end, updating the `PipelineRun` row as it goes (this is what `ProgressStream.jsx` polls via SSE). `STAGE_ORDER`, `next_stage_after()`, `is_stage_unlocked()` implement the sequential-approval gate. | `db_models.py`, `document_intelligence.py`, `stages_extraction.py`, `vector_store.py` |
+| `routers.py` | The API Gateway — every HTTP route. Wires the single-document lock, the SSE stream, stage generate/chat/approve, publish, and export. This is the file that *calls* almost everything else. | Everything above |
+| `main.py` | FastAPI app instance, CORS middleware, `@app.on_event("startup")` → `init_db()`. | `config.py`, `database.py`, `routers.py` |
+| `test_pipeline_e2e.py` | Full pipeline test against the real FastAPI app with a **mocked** LLM + mocked embeddings (no real Ollama/HF network needed). Proves the whole state machine + schema-repair retry logic end to end. | Everything (via `app.main`) |
+| `manual_api_test.sh` | Same walkthrough as the test above, but against a **running server with a real Ollama key** — a bash/curl script, not a mock. | — (calls the live HTTP API) |
+
+---
+
+## Backend module dependency diagram
+
+```plantuml
+@startuml ModuleDependencies
+skinparam componentStyle rectangle
+
+[main.py] --> [routers.py]
+[main.py] --> [database.py] : init_db()
+
+[routers.py] --> [config.py]
+[routers.py] --> [database.py]
+[routers.py] --> [db_models.py]
+[routers.py] --> [schemas.py]
+[routers.py] --> [orchestrator.py]
+[routers.py] --> [stages_generation.py]
+[routers.py] --> [validator.py]
+[routers.py] --> [publisher.py]
+[routers.py] --> [vector_store.py]
+[routers.py] --> [llm_client.py] : LLMError
+[routers.py] --> [document_intelligence.py] : infer_file_type()
+
+[orchestrator.py] --> [db_models.py]
+[orchestrator.py] --> [document_intelligence.py]
+[orchestrator.py] --> [stages_extraction.py]
+[orchestrator.py] --> [vector_store.py]
+
+[stages_extraction.py] --> [config.py]
+[stages_extraction.py] --> [document_intelligence.py] : ParsedDocument
+[stages_extraction.py] --> [llm_client.py] : chat_structured()
+[stages_extraction.py] --> [schemas.py]
+
+[stages_generation.py] --> [config.py]
+[stages_generation.py] --> [llm_client.py] : chat_structured(), pedagogy_search()
+[stages_generation.py] --> [schemas.py]
+
+[validator.py] --> [config.py]
+[validator.py] --> [schemas.py]
+[validator.py] --> [vector_store.py] : max_similarity_to_source()
+
+[publisher.py] --> [schemas.py]
+
+[vector_store.py] --> [config.py]
+[vector_store.py] --> [db_models.py] : EmbeddingChunk
+
+[llm_client.py] --> [config.py]
+[document_intelligence.py] --> [config.py]
+[db_models.py] --> [database.py] : Base
+[database.py] --> [config.py]
+@enduml
+```
+
+![Backend module dependency diagram](images/f5.svg)
+
+Reading this diagram: `config.py` and `database.py`/`db_models.py`/`schemas.py` are the
+foundation everything else builds on (no business logic, just settings/models/contracts).
+`llm_client.py` and `vector_store.py` are the two "infrastructure" services (LLM calls,
+embeddings) that the stage files consume. `routers.py` is the only file that talks to
+the frontend, and the only file that calls almost every other module — it's intentionally
+a thin coordination layer, not where any actual AI logic lives.
+
+---
+
+## Frontend file-by-file reference
+
+All paths are under `frontend/src/`.
+
+| File | What it does | Talks to |
+|---|---|---|
+| `main.jsx` | React entry point — mounts `<App />` into `#root`. | `App.jsx` |
+| `App.jsx` | Top-level state: checks for an active document on load (`api.getActive()`), and switches between three views: `UploadPanel` (no active doc) → `ProgressStream` (Stage 1-3 running) → `StageWorkspace` (Stage 4+). Also renders the header's **Delete & Start New** button. | `api.js`, all three components below |
+| `api.js` | The single fetch wrapper — every backend call goes through here (`upload`, `getDocument`, `generateStage`, `sendChat`, `approveStage`, `publish`, `exportUrl`, `streamUrl`, `deleteDocument`). Reads the backend base URL from `VITE_API_BASE` (set in `.env`). | Backend REST/SSE API |
+| `index.css` | Design tokens (the "blackboard + index card" palette/typography) and all component styling — no CSS-in-JS, no Tailwind, just custom properties + plain classes. | — |
+| `components/UploadPanel.jsx` | Drag-and-drop dropzone + doc-type-hint dropdown + the 3 optional clarifying-question fields (grade, teaching style, time constraints). Builds a `FormData` and calls `api.upload()`. | `api.js` |
+| `components/ProgressStream.jsx` | Opens an `EventSource` to the SSE endpoint, renders a live progress bar + current-stage label, and calls `onReady()` the moment the backend reports `waiting_user`. | `api.js` |
+| `components/StageWorkspace.jsx` | The largest component — the stage stepper, `StageContentView` (renders each stage's content in full: teaching plan, classroom content, activities, assessments with highlighted correct answers, learning gaps), the chat panel, the approve gate, and the "Publish" trigger once all 5 stages are approved. | `api.js`, `ExportMenu.jsx` |
+| `components/ExportMenu.jsx` | 5 download links (json/md/html/pdf/docx), each just an `<a href={api.exportUrl(...)}>`. | `api.js` |
+
+---
+
+## Data model reference
+
+The full chain of Pydantic schemas (`schemas.py`) that data flows through, stage by stage:
+
+```
+Classification            (Stage 2)  --\
+KnowledgeBase              (Stage 3)  ---> feed into every later stage as grounding context
+  ├─ Concept[]
+  ├─ Misconception[]
+TeachingPlan                (Stage 4)
+  └─ PeriodPlan[]           -----------> period_number is the join key used everywhere below
+PeriodContent[]             (Stage 5, one per period)
+Activity[]                  (Stage 6, one per period)
+Assessment[]                (Stage 7, one per period)
+  ├─ MCQ[]
+  └─ WrittenQuestion[]
+LearningGap[]                (Stage 8)
+ValidationReport             (Stage 9)
+  └─ ValidationIssue[]
+TeacherKnowledgePackage       (Stage 10) -- the sum of everything above, plus document_id
+```
+
+`period_number` is the thread that ties Stages 4-7 together — `validator._check_consistency()`
+exists specifically to catch a mismatch (e.g. Stage 6 generating an activity for a period
+that doesn't exist in Stage 4's plan).
+
+---
+
+## API reference
+
+All routes are prefixed `/api` (see `routers.py`).
+
+| Method & Path | Purpose |
+|---|---|
+| `GET /documents/active` | Is there a document loaded on this instance right now? |
+| `POST /documents/upload` | Upload a file (+ optional hints). `409` if one is already active. |
+| `DELETE /documents/{id}` | Wipe everything for this document (file, embeddings, stages, chat, exports). |
+| `GET /documents/{id}/stream` | SSE progress stream for the Stage 1-3 auto-run. |
+| `GET /documents/{id}` | Full document detail: classification, knowledge base, every stage's status/content. |
+| `POST /documents/{id}/stages/{stage}/generate` | Generate (or regenerate, with `{"feedback": "..."}`) a stage. |
+| `POST /documents/{id}/stages/{stage}/approve` | Approve a stage, unlocking the next one. |
+| `GET /documents/{id}/chat/{stage}` | Chat history for a stage. |
+| `POST /documents/{id}/chat/{stage}` | Send feedback — logs it AND triggers a regeneration. |
+| `POST /documents/{id}/publish` | Run Stage 9 validation + Stage 10 packaging. |
+| `GET /documents/{id}/export?format=json\|md\|html\|pdf\|docx` | Download the final package in a given format. |
+
+---
+
+## Setup & running locally
+
 ```bash
+# Backend
 cd backend
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # fill in OLLAMA_API_KEY (or set OLLAMA_HOST for a local daemon)
+cp .env.example .env        # set OLLAMA_API_KEY
 uvicorn app.main:app --reload --port 8000
-```
 
-### Frontend
-```bash
+# Frontend (second terminal)
 cd frontend
 npm install
-npm run dev   # http://localhost:5173, expects backend at http://localhost:8000
+npm run dev                 # reads VITE_API_BASE from frontend/.env
 ```
 
-### Deploying to Render (free tier)
-- Backend: use `backend/render.yaml`, or a manual Web Service with
-  `pip install -r requirements.txt` / `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1`.
-  **`--workers 1` is required** — a second worker would load a second copy of the
-  embedding model and can blow the RAM budget.
-- Set `OLLAMA_API_KEY` (Ollama Cloud) as a secret env var.
-- Render's free-tier disk is **ephemeral** — `SQLITE_PATH`/`UPLOAD_DIR`/`EXPORT_DIR`
-  reset on redeploy/restart. Fine for a demo/prototype; for persistence beyond that,
-  attach a Render persistent disk or point `SQLITE_PATH` at one.
-- Frontend: any static host (Render Static Site, Vercel, Netlify) with
-  `VITE_API_BASE=https://<your-backend>.onrender.com`.
+## Testing
 
----
+```bash
+# Mocked end-to-end test (no real API calls, ~seconds to run)
+cd backend
+PYTHONPATH=. python3 test_pipeline_e2e.py
 
-## Repo layout
+# Real-server curl walkthrough (needs the server running + a real Ollama key)
+cd backend
+./manual_api_test.sh /path/to/chapter.pdf
 ```
-backend/app/
-  config.py                 settings (env-driven)
-  database.py, db_models.py SQLite via SQLAlchemy
-  schemas.py                Pydantic contract for every stage + the final TKP
-  document_intelligence.py  Stage 1: parsing (pdf/docx/pptx/txt) + chunking
-  llm_client.py              Ollama chat client (retries/logging) + optional Tavily
-  vector_store.py           fastembed + in-SQLite cosine-similarity retrieval
-  stages_extraction.py      Stage 2 (classification) + Stage 3 (map-reduce extraction)
-  stages_generation.py      Stages 4-8 (interactive, feedback-revisable)
-  validator.py              Stage 9
-  publisher.py              Stage 10: TKP assembly + MD/HTML/PDF/DOCX renderers
-  orchestrator.py           background auto-run (1-3) + sequential stage gating (4-8)
-  routers.py                all API routes
-  main.py                   FastAPI app
-frontend/src/
-  App.jsx, api.js, components/{UploadPanel,ProgressStream,StageWorkspace,ExportMenu}.jsx
-samples/
-  sample_tkp_physics.json   STEM example (Grade 9 Physics)
-  sample_tkp_history.json   Humanities example (Grade 8 History)
-```
+
+## Deploying to Render
+
+See `backend/render.yaml` for the blueprint. Key points: `--workers 1` (a second worker
+would double-load the embedding model and can blow the free-tier RAM budget), and the
+free tier's disk is ephemeral, so `SQLITE_PATH`/`UPLOAD_DIR`/`EXPORT_DIR` reset on
+redeploy unless you attach a persistent disk.
 
 ## Known limitations / next steps
-- SQLite + local disk is single-instance by nature; horizontal scaling would need
+
+- SQLite + local disk is single-instance by nature — horizontal scaling would need
   Postgres + object storage (S3) for uploads/exports.
-- The DOCX/PDF exporters are a minimal Markdown walker, not a full CSS-to-DOCX engine —
-  fine for lesson-plan documents, would need more work for complex tables/equations.
-- Stage 1's scanned-PDF detection flags low-text-density PDFs but doesn't yet run an
-  OCR/vision pass — `ParsedDocument.needs_advanced_parsing` is a ready hook for one.
+- DOCX/PDF export is a minimal Markdown walker, not a full CSS-to-DOCX engine — fine for
+  lesson-plan text, would need more work for complex tables/equations.
+- No OCR pass yet for scanned PDFs — `ParsedDocument.needs_advanced_parsing` is a ready
+  hook for one.
+- No auth/multi-tenancy — this is deliberate (single-document-at-a-time, resource-capped
+  free-tier deploy), but would need to change for a multi-teacher production deployment.
