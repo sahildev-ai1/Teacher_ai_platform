@@ -50,6 +50,7 @@ def _get_client() -> QdrantClient:
             url=settings.qdrant_url,
             api_key=settings.qdrant_api_key or None,
             cloud_inference=True,
+            timeout=settings.qdrant_timeout_seconds,
         )
     if not _collection_ready:
         if not _client.collection_exists(settings.qdrant_collection):
@@ -80,6 +81,18 @@ def _get_client() -> QdrantClient:
     return _client
 
 
+def healthcheck() -> None:
+    """Cheap connectivity check -- ensures the collection/index exist without
+    touching any document's data. Meant to be called BEFORE the expensive
+    Stage 1-3 work starts, so a broken Qdrant setup (wrong URL, bad API key,
+    cluster unreachable) fails fast in seconds instead of after burning
+    through minutes of LLM calls. Raises on failure; callers decide what to
+    do with that (see orchestrator.run_intelligence_pipeline)."""
+    if not is_configured():
+        return
+    _get_client()
+
+
 def _doc_filter(document_id: str) -> models.Filter:
     return models.Filter(
         must=[models.FieldCondition(key="document_id", match=models.MatchValue(value=document_id))]
@@ -95,12 +108,21 @@ def _point_id(document_id: str, chunk_index: int) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_OID, f"{document_id}:{chunk_index}"))
 
 
+def _batched(items: list, size: int):
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
+
+
 def ingest_chunks(db: Session, document_id: str, chunks: List[str]) -> None:
     """Embeds and stores all chunks for a document via Qdrant Cloud Inference.
     Idempotent: clears any existing points for this document_id first.
-    `db` is accepted (unused) purely to keep the call signature identical to
-    the previous SQLite-backed implementation -- orchestrator.py doesn't need
-    to change."""
+    Upserts are batched (settings.qdrant_upsert_batch_size) rather than sent
+    as one request -- Cloud Inference embeds every chunk server-side as part
+    of the request, so a large document's full chunk set in a single upsert
+    can take long enough to hit a timeout even with a generous client-side
+    limit. `db` is accepted (unused) purely to keep the call signature
+    identical to the previous SQLite-backed implementation -- orchestrator.py
+    doesn't need to change."""
     if not is_configured():
         logger.warning("qdrant_not_configured skip_ingest document_id=%s", document_id)
         return
@@ -119,7 +141,11 @@ def ingest_chunks(db: Session, document_id: str, chunks: List[str]) -> None:
         )
         for i, chunk in enumerate(chunks)
     ]
-    client.upsert(collection_name=settings.qdrant_collection, points=points)
+    total_batches = (len(points) + settings.qdrant_upsert_batch_size - 1) // settings.qdrant_upsert_batch_size
+    for batch_num, batch in enumerate(_batched(points, settings.qdrant_upsert_batch_size), start=1):
+        logger.info("qdrant_upsert_batch document_id=%s batch=%d/%d size=%d",
+                    document_id, batch_num, total_batches, len(batch))
+        client.upsert(collection_name=settings.qdrant_collection, points=batch)
 
 
 def retrieve(db: Session, document_id: str, query: str, k: int = 5) -> List[str]:

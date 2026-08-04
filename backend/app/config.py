@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     qdrant_url: str = ""
     qdrant_api_key: str = ""
     qdrant_collection: str = "document_chunks"
+    # Cloud Inference computes embeddings server-side inside Qdrant's cluster,
+    # which is slower than a plain vector upsert -- a large document's full
+    # chunk set in one request can outrun a short default timeout. Both of
+    # these exist to tune that: a generous per-request timeout, and batching
+    # so no single request has to embed too many chunks at once.
+    qdrant_timeout_seconds: int = 60
+    qdrant_upsert_batch_size: int = 16
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"  # a free Qdrant Cloud Inference model
     embedding_dim: int = 384
 
