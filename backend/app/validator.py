@@ -25,7 +25,7 @@ from .schemas import (
     Classification, KnowledgeBase, TeachingPlan, PeriodContent, Activity,
     Assessment, LearningGap, ValidationIssue, ValidationReport,
 )
-from .vector_store import max_similarity_to_source
+from . import vector_store
 
 
 def _check_schema(*objs) -> bool:
@@ -69,13 +69,21 @@ def _check_completeness(plan: TeachingPlan, kb: KnowledgeBase) -> List[Validatio
 
 def _check_hallucination(db: Session, document_id: str, kb: KnowledgeBase,
                           content: List[PeriodContent], assessments: List[Assessment]) -> tuple:
+    if not vector_store.is_configured():
+        return [ValidationIssue(
+            stage="stage9_validation", severity="info",
+            message="Grounding/hallucination check skipped -- Qdrant isn't configured "
+                    "(set QDRANT_URL/QDRANT_API_KEY to enable). This does not mean the "
+                    "content is ungrounded, just that it hasn't been checked.",
+        )], 0.0
+
     issues = []
     scores = []
 
     def _score(label: str, text: str, stage: str):
         if not text or not text.strip():
             return
-        sim = max_similarity_to_source(db, document_id, text)
+        sim = vector_store.max_similarity_to_source(db, document_id, text)
         scores.append(sim)
         if sim < settings.hallucination_similarity_threshold:
             issues.append(ValidationIssue(

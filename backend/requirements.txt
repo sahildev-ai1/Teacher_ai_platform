@@ -16,11 +16,14 @@ python-pptx==1.0.2
 # Chunking (only the text-splitter piece of LangChain; no heavy extras pulled in)
 langchain-text-splitters==0.3.0
 
-# Embeddings: fastembed uses ONNX Runtime, NOT torch. Quantized MiniLM ~ 90MB on
-# disk, loads to well under 300MB RAM -- this is the whole reason we're not using
-# sentence-transformers/langchain-huggingface (those pull in torch, which alone
-# can blow past a 512MB Render free instance).
-fastembed==0.8.0
+# Vector store: Qdrant Cloud with server-side Cloud Inference. No local
+# embedding model, no ONNX/torch, no download onto Render's disk -- Qdrant
+# Cloud's free tier (1GB RAM, 4GB disk, permanent, no credit card) computes
+# embeddings itself. This is what actually fixes "ran out of space": the
+# previous fastembed approach downloaded a ~90MB ONNX model onto Render's
+# small disk on every cold start, which combined with everything else in
+# memory was pushing the free instance over its limit.
+qdrant-client==1.18.0
 
 # Export: xhtml2pdf (pure Python, ReportLab-based) instead of WeasyPrint --
 # WeasyPrint needs system Cairo/Pango/GDK-Pixbuf packages that aren't present

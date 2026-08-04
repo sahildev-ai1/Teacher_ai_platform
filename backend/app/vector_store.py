@@ -1,106 +1,140 @@
 """
-Lightweight RAG store: fastembed (ONNX Runtime, no torch) for embeddings,
-SQLite (via db_models.EmbeddingChunk) for storage, numpy for cosine similarity.
+Vector store: Qdrant Cloud, using server-side Cloud Inference.
 
-Used for:
-  - Grounded retrieval during generation (Stages 4-8 can pull the most relevant
-    source chunks for a period/topic instead of stuffing the whole document
-    into every prompt).
-  - Stage 9 hallucination scoring: does generated content have a reasonably
-    similar chunk somewhere in the source? Low max-similarity = ungrounded risk.
+Why this replaced the old fastembed/ONNX approach: fastembed still needed to
+download a ~90MB model onto Render's disk on every cold start (Render's free
+tier disk is small and ephemeral) and load onnxruntime into the same 512MB-RAM
+process as everything else -- that combination is what ran the instance out
+of space right after Stage 3 finished and Stage 1's embeddings kicked in.
 
-The embedding model is loaded lazily and once per process (module-level
-singleton) since loading it is the single most expensive operation we do.
+Qdrant Cloud's free tier (cloud.qdrant.io -- 1GB RAM, 4GB disk, permanently
+free, no credit card) computes embeddings *inside Qdrant's own cluster* when
+you pass a `models.Document(text=..., model=...)` instead of a raw vector --
+no local model, no download, no onnxruntime dependency at all.
+
+All documents share ONE collection (`settings.qdrant_collection`); each point
+is tagged with a `document_id` payload field and every read/write is scoped
+with a filter on it. Given the single-document-at-a-time lock, only one
+document's points ever exist at once in practice, but filtering is still
+correct/defensive rather than relying on that.
+
+If QDRANT_URL isn't configured, every function here degrades gracefully
+(logs a warning, returns empty/neutral results) rather than crashing the
+pipeline -- grounding/hallucination checks just come back uninformative
+until Qdrant is set up.
 """
 import logging
-from typing import List, Tuple
+from typing import List, Optional
 
-import numpy as np
+from qdrant_client import QdrantClient, models
 from sqlalchemy.orm import Session
 
 from .config import settings
-from .db_models import EmbeddingChunk
 
 logger = logging.getLogger("teacher_ai.vectorstore")
 
-_model = None
+_client: Optional[QdrantClient] = None
+_collection_ready = False
 
 
-def _get_model():
-    global _model
-    if _model is None:
-        from fastembed import TextEmbedding
-        logger.info("loading_embedding_model model=%s", settings.embedding_model)
-        _model = TextEmbedding(model_name=settings.embedding_model)
-    return _model
+def is_configured() -> bool:
+    return bool(settings.qdrant_url)
 
 
-def embed_texts(texts: List[str]) -> np.ndarray:
-    """Returns an (n, dim) float32 array. fastembed yields a generator of
-    numpy arrays; we materialize + stack + L2-normalize once so every later
-    similarity computation is a plain dot product."""
-    model = _get_model()
-    vectors = np.array(list(model.embed(texts)), dtype=np.float32)
-    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    return vectors / norms
+def _get_client() -> QdrantClient:
+    global _client, _collection_ready
+    if _client is None:
+        logger.info("connecting_qdrant url=%s", settings.qdrant_url)
+        _client = QdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key or None,
+            cloud_inference=True,
+        )
+    if not _collection_ready:
+        if not _client.collection_exists(settings.qdrant_collection):
+            logger.info("creating_qdrant_collection name=%s", settings.qdrant_collection)
+            _client.create_collection(
+                collection_name=settings.qdrant_collection,
+                vectors_config=models.VectorParams(
+                    size=settings.embedding_dim, distance=models.Distance.COSINE
+                ),
+            )
+        _collection_ready = True
+    return _client
+
+
+def _doc_filter(document_id: str) -> models.Filter:
+    return models.Filter(
+        must=[models.FieldCondition(key="document_id", match=models.MatchValue(value=document_id))]
+    )
 
 
 def ingest_chunks(db: Session, document_id: str, chunks: List[str]) -> None:
-    """Embeds and stores all chunks for a document. Idempotent: clears any
-    existing chunks for this document_id first (relevant on re-runs)."""
-    db.query(EmbeddingChunk).filter(EmbeddingChunk.document_id == document_id).delete()
-    if not chunks:
-        db.commit()
+    """Embeds and stores all chunks for a document via Qdrant Cloud Inference.
+    Idempotent: clears any existing points for this document_id first.
+    `db` is accepted (unused) purely to keep the call signature identical to
+    the previous SQLite-backed implementation -- orchestrator.py doesn't need
+    to change."""
+    if not is_configured():
+        logger.warning("qdrant_not_configured skip_ingest document_id=%s", document_id)
         return
-    vectors = embed_texts(chunks)
-    for i, (text, vec) in enumerate(zip(chunks, vectors)):
-        db.add(EmbeddingChunk(
-            document_id=document_id,
-            chunk_index=i,
-            text=text,
-            vector=vec.astype(np.float32).tobytes(),
-        ))
-    db.commit()
-
-
-def _load_all(db: Session, document_id: str) -> Tuple[List[str], np.ndarray]:
-    rows = (
-        db.query(EmbeddingChunk)
-        .filter(EmbeddingChunk.document_id == document_id)
-        .order_by(EmbeddingChunk.chunk_index)
-        .all()
+    if not chunks:
+        return
+    client = _get_client()
+    client.delete(
+        collection_name=settings.qdrant_collection,
+        points_selector=models.FilterSelector(filter=_doc_filter(document_id)),
     )
-    if not rows:
-        return [], np.zeros((0, settings.embedding_dim), dtype=np.float32)
-    texts = [r.text for r in rows]
-    matrix = np.stack([np.frombuffer(r.vector, dtype=np.float32) for r in rows])
-    return texts, matrix
+    points = [
+        models.PointStruct(
+            id=f"{document_id}-{i}",
+            vector=models.Document(text=chunk, model=settings.embedding_model),
+            payload={"document_id": document_id, "chunk_index": i, "text": chunk},
+        )
+        for i, chunk in enumerate(chunks)
+    ]
+    client.upsert(collection_name=settings.qdrant_collection, points=points)
 
 
 def retrieve(db: Session, document_id: str, query: str, k: int = 5) -> List[str]:
     """Top-k most similar source chunks to `query` for this document."""
-    texts, matrix = _load_all(db, document_id)
-    if not texts:
+    if not is_configured():
         return []
-    q = embed_texts([query])[0]  # already normalized
-    sims = matrix @ q  # matrix rows are normalized too -> cosine similarity
-    top_idx = np.argsort(-sims)[:k]
-    return [texts[i] for i in top_idx]
+    client = _get_client()
+    result = client.query_points(
+        collection_name=settings.qdrant_collection,
+        query=models.Document(text=query, model=settings.embedding_model),
+        query_filter=_doc_filter(document_id),
+        limit=k,
+        with_payload=True,
+    )
+    return [p.payload["text"] for p in result.points]
 
 
 def max_similarity_to_source(db: Session, document_id: str, text: str) -> float:
     """Used by Stage 9: the highest cosine similarity between `text` (a piece
     of generated content) and ANY chunk of the original source. Low values
-    flag possible hallucination / drift from the primary reference."""
-    texts, matrix = _load_all(db, document_id)
-    if not texts or not text.strip():
+    flag possible hallucination / drift from the primary reference. Returns
+    0.0 (neutral/unknown, not "definitely hallucinated") if Qdrant isn't
+    configured or there's nothing to compare against."""
+    if not is_configured() or not text.strip():
         return 0.0
-    q = embed_texts([text])[0]
-    sims = matrix @ q
-    return float(np.max(sims))
+    client = _get_client()
+    result = client.query_points(
+        collection_name=settings.qdrant_collection,
+        query=models.Document(text=text, model=settings.embedding_model),
+        query_filter=_doc_filter(document_id),
+        limit=1,
+        with_payload=False,
+    )
+    return float(result.points[0].score) if result.points else 0.0
 
 
 def delete_document_vectors(db: Session, document_id: str) -> None:
-    db.query(EmbeddingChunk).filter(EmbeddingChunk.document_id == document_id).delete()
-    db.commit()
+    if not is_configured():
+        return
+    client = _get_client()
+    client.delete(
+        collection_name=settings.qdrant_collection,
+        points_selector=models.FilterSelector(filter=_doc_filter(document_id)),
+    )

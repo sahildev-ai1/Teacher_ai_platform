@@ -31,10 +31,15 @@ class Settings(BaseSettings):
     # extraction map steps) vs. the main model for final synthesis/generation.
     ollama_fast_model: str = "gemma4:cloud"
 
-    # --- Embeddings ---
-    # fastembed (ONNX Runtime, no torch). Quantized MiniLM: ~90MB on disk,
-    # comfortably fits a 512MB Render free instance alongside FastAPI/uvicorn.
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # --- Vector store: Qdrant Cloud (server-side Cloud Inference) ---
+    # Free tier: https://cloud.qdrant.io -- 1GB RAM / 4GB disk, permanently free,
+    # no credit card. Leave qdrant_url blank to run with grounding/hallucination
+    # checks soft-disabled (the rest of the pipeline still works) until you set
+    # one up.
+    qdrant_url: str = ""
+    qdrant_api_key: str = ""
+    qdrant_collection: str = "document_chunks"
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"  # a free Qdrant Cloud Inference model
     embedding_dim: int = 384
 
     # --- Chunking ---

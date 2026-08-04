@@ -6,10 +6,15 @@ services:
     env: python
     plan: free
     buildCommand: "pip install -r requirements.txt"
-    # --workers 1 is deliberate: a free instance (512MB RAM) cannot safely run
-    # multiple uvicorn workers once the embedding model is loaded in each.
+    # --workers 1 is deliberate: a free instance (512MB RAM) shouldn't run
+    # multiple uvicorn workers.
     startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1"
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7  # Render's PYTHON_VERSION env var takes precedence over
+                        # .python-version and must be a full x.y.z version; pinned
+                        # because Render's own default (3.14.3 as of writing) is too
+                        # new for some published wheels.
       - key: OLLAMA_API_KEY
         sync: false
       - key: OLLAMA_MODEL
@@ -18,9 +23,10 @@ services:
         value: gemma4:cloud
       - key: TAVILY_API_KEY
         sync: false
-      - key: HF_TOKEN
+      - key: QDRANT_URL
+        sync: false  # from https://cloud.qdrant.io -- free tier, no credit card
+      - key: QDRANT_API_KEY
         sync: false
-        value: ""  # optional -- see backend/.env.example
       - key: FRONTEND_ORIGIN
         value: https://your-frontend.onrender.com
       - key: SQLITE_PATH
