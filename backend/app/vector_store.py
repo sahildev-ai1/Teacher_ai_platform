@@ -59,6 +59,22 @@ def _get_client() -> QdrantClient:
                     size=settings.embedding_dim, distance=models.Distance.COSINE
                 ),
             )
+        # Qdrant requires an explicit payload index before a field can be
+        # used in a filter -- every ingest_chunks/retrieve/max_similarity_to_
+        # source/delete_document_vectors call below filters on document_id,
+        # so without this every one of them 400s with "Index required but
+        # not found for document_id". Safe to call unconditionally (even on
+        # a collection that already existed): it also self-heals a
+        # collection created before this fix existed, like the one already
+        # sitting on your cluster from an earlier run.
+        try:
+            _client.create_payload_index(
+                collection_name=settings.qdrant_collection,
+                field_name="document_id",
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("qdrant_index_creation_failed error=%s", exc)
         _collection_ready = True
     return _client
 
