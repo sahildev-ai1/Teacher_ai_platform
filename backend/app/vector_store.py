@@ -24,6 +24,7 @@ pipeline -- grounding/hallucination checks just come back uninformative
 until Qdrant is set up.
 """
 import logging
+import uuid
 from typing import List, Optional
 
 from qdrant_client import QdrantClient, models
@@ -85,6 +86,15 @@ def _doc_filter(document_id: str) -> models.Filter:
     )
 
 
+def _point_id(document_id: str, chunk_index: int) -> str:
+    """Qdrant point IDs must be an unsigned integer or a valid UUID -- a plain
+    string like "{document_id}-{i}" gets rejected with a 400. uuid5 gives a
+    deterministic, valid-format UUID derived from the same inputs, so this
+    stays idempotent (re-ingesting the same document_id/chunk_index always
+    maps to the same point) without needing to track IDs anywhere else."""
+    return str(uuid.uuid5(uuid.NAMESPACE_OID, f"{document_id}:{chunk_index}"))
+
+
 def ingest_chunks(db: Session, document_id: str, chunks: List[str]) -> None:
     """Embeds and stores all chunks for a document via Qdrant Cloud Inference.
     Idempotent: clears any existing points for this document_id first.
@@ -103,7 +113,7 @@ def ingest_chunks(db: Session, document_id: str, chunks: List[str]) -> None:
     )
     points = [
         models.PointStruct(
-            id=f"{document_id}-{i}",
+            id=_point_id(document_id, i),
             vector=models.Document(text=chunk, model=settings.embedding_model),
             payload={"document_id": document_id, "chunk_index": i, "text": chunk},
         )
