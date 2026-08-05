@@ -17,21 +17,20 @@ screenshot of the deployed app.
 ## Table of Contents
 
 1. [What this project does](#what-this-project-does)
-2. [Rendering the diagrams](#rendering-the-diagrams)
-3. [System architecture](#system-architecture)
-4. [The complete user flow](#the-complete-user-flow) — screen by screen, file by file
-5. [The 10-stage pipeline, as a flowchart](#the-10-stage-pipeline-as-a-flowchart)
-6. [State machines](#state-machines)
-7. [End-to-end sequence diagram](#end-to-end-sequence-diagram)
-8. [Backend file-by-file reference](#backend-file-by-file-reference)
-9. [Backend module dependency diagram](#backend-module-dependency-diagram)
-10. [Frontend file-by-file reference](#frontend-file-by-file-reference)
-11. [Data model reference](#data-model-reference)
-12. [API reference](#api-reference)
-13. [Setup & running locally](#setup--running-locally)
-14. [Testing](#testing)
-15. [Deploying to Render](#deploying-to-render)
-16. [Known limitations / next steps](#known-limitations--next-steps)
+2. [System architecture](#system-architecture)
+3. [The complete user flow](#the-complete-user-flow) — screen by screen, file by file
+4. [The 10-stage pipeline, as a flowchart](#the-10-stage-pipeline-as-a-flowchart)
+5. [State machines](#state-machines)
+6. [End-to-end sequence diagram](#end-to-end-sequence-diagram)
+7. [Backend file-by-file reference](#backend-file-by-file-reference)
+8. [Backend module dependency diagram](#backend-module-dependency-diagram)
+9. [Frontend file-by-file reference](#frontend-file-by-file-reference)
+10. [Data model reference](#data-model-reference)
+11. [API reference](#api-reference)
+12. [Setup & running locally](#setup--running-locally)
+13. [Testing](#testing)
+14. [Deploying to Render](#deploying-to-render)
+15. [Known limitations / next steps](#known-limitations--next-steps)
 
 ---
 
@@ -60,83 +59,11 @@ process, no system-level native dependencies (see the main `README.md`'s "why fa
 
 ---
 
-## Rendering the diagrams
 
-Every diagram below is **PlantUML source** in a fenced ` ```plantuml ` block. To render
-one:
-
-- **Fastest**: paste the block into <https://www.plantuml.com/plantuml/uml/> (official
-  online renderer) and it draws the image instantly.
-- **VS Code**: install the "PlantUML" extension (jebbs.plantuml), open a `.puml` file
-  with the block's contents, and press `Alt+D` to preview.
-- **Locally**: `pip install plantuml` (needs a Java runtime) then
-  `plantuml diagram.puml` to get a `.png`.
-
-Rendered versions of every diagram, plus screenshots of the running app, are already
-included in `images/` and linked inline throughout this document — you don't need to
-render anything yourself unless you want to regenerate them from the PlantUML source
-above.
-
----
+   
 
 ## System architecture
 
-```plantuml
-@startuml SystemArchitecture
-skinparam componentStyle rectangle
-actor Teacher
-
-package "Frontend (React + Vite)" {
-  [UploadPanel]
-  [ProgressStream]
-  [StageWorkspace]
-  [ExportMenu]
-}
-
-package "Backend (FastAPI)" {
-  [routers.py\n(API Gateway)] as Routers
-  [orchestrator.py] as Orchestrator
-  [stages_extraction.py] as StagesExtraction
-  [stages_generation.py] as StagesGeneration
-  [validator.py] as Validator
-  [publisher.py] as Publisher
-  [llm_client.py] as LLMClient
-  [vector_store.py] as VectorStore
-  [document_intelligence.py] as DocIntel
-}
-
-database "SQLite\n(documents, stage_outputs,\nchat_messages, embedding_chunks,\npipeline_runs)" as DB
-
-cloud "Ollama Cloud / Local\n(chat model)" as Ollama
-cloud "Tavily (optional)\npedagogy search" as Tavily
-cloud "Hugging Face Hub\n(fastembed model download)" as HF
-
-Teacher --> UploadPanel
-Teacher --> StageWorkspace
-UploadPanel --> Routers : REST (multipart upload)
-ProgressStream --> Routers : SSE stream
-StageWorkspace --> Routers : REST (generate/chat/approve/publish)
-ExportMenu --> Routers : REST (export)
-
-Routers --> Orchestrator
-Routers --> StagesGeneration
-Routers --> Validator
-Routers --> Publisher
-Orchestrator --> DocIntel
-Orchestrator --> StagesExtraction
-Orchestrator --> VectorStore
-StagesExtraction --> LLMClient
-StagesGeneration --> LLMClient
-Validator --> VectorStore
-
-LLMClient --> Ollama
-LLMClient --> Tavily
-VectorStore --> HF : model download (first boot)
-VectorStore --> DB
-Routers --> DB
-Orchestrator --> DB
-@enduml
-```
 
 ![System architecture diagram](images/f1.svg)
 
@@ -285,51 +212,6 @@ export/download buttons (JSON, Markdown, HTML, PDF, Word):
 
 ## The 10-stage pipeline, as a flowchart
 
-```plantuml
-@startuml PipelineFlow
-start
-:Teacher uploads document\n(+ optional grade/style/time hints);
-if (Another document already active?) then (yes)
-  :409 Conflict --\n"delete current document first";
-  stop
-else (no)
-endif
-
-partition "AUTO-RUN (background task, streamed via SSE)" {
-  :Stage 1 - Document Intelligence\n(parse PDF/DOCX/PPTX/TXT, detect structure);
-  :Stage 2 - Educational Classification\n(compressed whole-doc context -> subject/grade/topic/etc);
-  :Stage 3 - Knowledge Extraction\n(map-reduce over chunks -> objectives/concepts/definitions/...);
-  :Embed chunks into vector store\n(for later grounding checks);
-}
-
-:PipelineRun.state = "waiting_user";
-
-partition "INTERACTIVE (teacher-gated, one stage at a time)" {
-  :Stage 4 - Teaching Planner;
-  if (Teacher sends chat feedback?) then (yes)
-    :Regenerate with feedback\n(existing draft revised, not restarted);
-    note right: loops until happy
-  endif
-  :Teacher approves Stage 4;
-  :Stage 5 - Classroom Content;
-  :Teacher approves Stage 5;
-  :Stage 6 - Activities;
-  :Teacher approves Stage 6;
-  :Stage 7 - Assessments;
-  :Teacher approves Stage 7;
-  :Stage 8 - Learning Gap Analysis;
-  :Teacher approves Stage 8;
-}
-
-partition "AUTO-RUN (synchronous, on publish click)" {
-  :Stage 9 - Validation\n(schema + hallucination + completeness + consistency);
-  :Stage 10 - Publishing\n(assemble TeacherKnowledgePackage.json,\nrender MD/HTML/PDF/DOCX);
-}
-
-:Teacher downloads exports;
-stop
-@enduml
-```
 
 ![10-stage pipeline flowchart](images/f2.svg)
 
@@ -337,28 +219,6 @@ stop
 
 ## State machines
 
-```plantuml
-@startuml StateMachines
-
-state "Document.status" as DocState {
-  [*] --> uploaded
-  uploaded --> ready_for_planning : Stage 1-3 auto-run completes
-  ready_for_planning --> published : Stage 9/10 (publish) completes
-  uploaded --> error : pipeline exception
-  published --> [*] : DELETE /documents/{id}\n(single-doc lock reset)
-  uploaded --> [*] : DELETE /documents/{id}
-}
-
-state "StageOutput.status\n(per stage, Stages 4-8)" as StageState {
-  [*] --> pending
-  pending --> generated : POST .../generate
-  generated --> generated : POST .../generate\n(with feedback -- revises in place)
-  generated --> approved : POST .../approve
-  approved --> [*]
-}
-
-@enduml
-```
 
 ![State machines diagram](images/f3.svg)
 
@@ -370,74 +230,6 @@ is `approved`. There's no separate "workflow engine" — the state machine *is* 
 ---
 
 ## End-to-end sequence diagram
-
-```plantuml
-@startuml EndToEndSequence
-actor Teacher
-participant "React\nFrontend" as FE
-participant "FastAPI\nrouters.py" as API
-participant "orchestrator.py" as Orch
-participant "stages_extraction.py\n/ stages_generation.py" as Stages
-participant "llm_client.py" as LLM
-participant "vector_store.py" as VS
-participant "validator.py\npublisher.py" as VP
-database "SQLite" as DB
-
-Teacher -> FE : Upload document + hints
-FE -> API : POST /api/documents/upload
-API -> DB : create Document row
-API -> Orch : BackgroundTasks.add_task(run_intelligence_pipeline)
-API --> FE : {document_id, status: "processing"}
-
-FE -> API : GET /api/documents/{id}/stream (SSE)
-activate Orch
-Orch -> Stages : parse_document() [Stage 1]
-Orch -> Stages : classify_document() [Stage 2]
-Stages -> LLM : chat_structured(Classification)
-Orch -> Stages : extract_knowledge() [Stage 3, map-reduce]
-Stages -> LLM : chat_structured(KnowledgeBase) x N
-Orch -> VS : ingest_chunks() (embed + store)
-Orch -> DB : update Document + PipelineRun\n(state=waiting_user)
-deactivate Orch
-API --> FE : SSE: {state: "waiting_user"}
-
-loop Stages 4-8 (teacher-gated)
-  Teacher -> FE : click Generate
-  FE -> API : POST /stages/{stage}/generate
-  API -> Stages : generate_*(...)
-  Stages -> LLM : chat_structured(schema)
-  LLM --> Stages : validated Pydantic object
-  API -> DB : save StageOutput (status=generated)
-  API --> FE : content JSON
-  FE --> Teacher : render in StageWorkspace
-
-  opt Teacher gives feedback
-    Teacher -> FE : type feedback + Send
-    FE -> API : POST /chat/{stage}
-    API -> Stages : generate_*(feedback=..., existing=...)
-    Stages -> LLM : chat_structured(schema)
-    API -> DB : save ChatMessage + updated StageOutput
-  end
-
-  Teacher -> FE : click Approve
-  FE -> API : POST /stages/{stage}/approve
-  API -> DB : StageOutput.status = approved
-end
-
-Teacher -> FE : click Publish
-FE -> API : POST /publish
-API -> VP : validate_package() [Stage 9]
-VP -> VS : max_similarity_to_source() (hallucination check)
-API -> VP : build_package() [Stage 10]
-API -> DB : save TeacherKnowledgePackage.json to disk
-API --> FE : final package + validation report
-
-Teacher -> FE : click Download (any format)
-FE -> API : GET /export?format=...
-API -> VP : render_markdown/html/pdf/docx()
-API --> FE : file bytes
-@enduml
-```
 
 ![End-to-end sequence diagram](images/f4.svg)
 
@@ -471,54 +263,7 @@ All paths are under `backend/app/`.
 
 ## Backend module dependency diagram
 
-```plantuml
-@startuml ModuleDependencies
-skinparam componentStyle rectangle
 
-[main.py] --> [routers.py]
-[main.py] --> [database.py] : init_db()
-
-[routers.py] --> [config.py]
-[routers.py] --> [database.py]
-[routers.py] --> [db_models.py]
-[routers.py] --> [schemas.py]
-[routers.py] --> [orchestrator.py]
-[routers.py] --> [stages_generation.py]
-[routers.py] --> [validator.py]
-[routers.py] --> [publisher.py]
-[routers.py] --> [vector_store.py]
-[routers.py] --> [llm_client.py] : LLMError
-[routers.py] --> [document_intelligence.py] : infer_file_type()
-
-[orchestrator.py] --> [db_models.py]
-[orchestrator.py] --> [document_intelligence.py]
-[orchestrator.py] --> [stages_extraction.py]
-[orchestrator.py] --> [vector_store.py]
-
-[stages_extraction.py] --> [config.py]
-[stages_extraction.py] --> [document_intelligence.py] : ParsedDocument
-[stages_extraction.py] --> [llm_client.py] : chat_structured()
-[stages_extraction.py] --> [schemas.py]
-
-[stages_generation.py] --> [config.py]
-[stages_generation.py] --> [llm_client.py] : chat_structured(), pedagogy_search()
-[stages_generation.py] --> [schemas.py]
-
-[validator.py] --> [config.py]
-[validator.py] --> [schemas.py]
-[validator.py] --> [vector_store.py] : max_similarity_to_source()
-
-[publisher.py] --> [schemas.py]
-
-[vector_store.py] --> [config.py]
-[vector_store.py] --> [db_models.py] : EmbeddingChunk
-
-[llm_client.py] --> [config.py]
-[document_intelligence.py] --> [config.py]
-[db_models.py] --> [database.py] : Base
-[database.py] --> [config.py]
-@enduml
-```
 
 ![Backend module dependency diagram](images/f5.svg)
 
