@@ -66,7 +66,21 @@ def run_intelligence_pipeline(db_factory, document_id: str, doc_type_hint: str,
     try:
         document = db.query(Document).filter(Document.id == document_id).first()
         run = _get_or_create_run(db, document_id)
-        _update_run(db, run, state="running", current_stage="stage1_document_intelligence", progress=5,
+        _update_run(db, run, state="running", current_stage="preflight", progress=1,
+                    message="Checking connections...")
+
+        # Fail fast: if Qdrant is configured but unreachable/misconfigured,
+        # find out in seconds, not after burning through several minutes of
+        # LLM calls in Stage 2-3 only to fail on indexing at the very end.
+        try:
+            vector_store.healthcheck()
+        except Exception as exc:  # noqa: BLE001
+            logger.error("qdrant_preflight_failed document_id=%s error=%s", document_id, exc)
+            _update_run(db, run, state="error",
+                        message=f"Can't reach Qdrant (check QDRANT_URL/QDRANT_API_KEY): {exc}")
+            return
+
+        _update_run(db, run, current_stage="stage1_document_intelligence", progress=5,
                     message="Parsing document...")
 
         parsed = parse_document(document.raw_text_path, document.file_type)
@@ -87,7 +101,8 @@ def run_intelligence_pipeline(db_factory, document_id: str, doc_type_hint: str,
         db.add(document)
         db.commit()
         _update_run(db, run, progress=35, current_stage="stage3_knowledge_extraction",
-                    message="Extracting concepts (batch 0)...")
+                    message="Extracting concepts (batch 0)... this stage is the slowest -- "
+                            "safe to close this tab and check back in 20-30 minutes.")
 
         def _progress_cb(done, total):
             pct = 35 + int(50 * done / max(total, 1))
@@ -101,7 +116,18 @@ def run_intelligence_pipeline(db_factory, document_id: str, doc_type_hint: str,
         db.commit()
         _update_run(db, run, progress=90, message="Indexing document for grounding checks...")
 
-        vector_store.ingest_chunks(db, document_id, parsed.chunks)
+        # Indexing failures are deliberately NON-FATAL: Stage 2-3's expensive,
+        # already-committed LLM work must not be thrown away because of a
+        # transient Qdrant hiccup (timeout, network blip) at the very last
+        # step. The teacher can still proceed to Stage 4 -- Stage 9's
+        # grounding check just won't have anything to compare against for
+        # this document if this failed.
+        try:
+            vector_store.ingest_chunks(db, document_id, parsed.chunks)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("ingest_chunks_failed document_id=%s error=%s", document_id, exc)
+            _update_run(db, run, message="Indexing failed (grounding checks will be skipped for "
+                                          "this document) -- continuing anyway.")
 
         document.status = "ready_for_planning"
         db.add(document)

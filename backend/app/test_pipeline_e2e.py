@@ -158,7 +158,12 @@ def fake_delete_document_vectors(db, document_id):
     _fake_vector_store.pop(document_id, None)
 
 
+def fake_healthcheck():
+    pass  # no-op: real healthcheck() would attempt a live Qdrant connection
+
+
 vector_store.is_configured = fake_is_configured
+vector_store.healthcheck = fake_healthcheck
 vector_store.ingest_chunks = fake_ingest_chunks
 vector_store.retrieve = fake_retrieve
 vector_store.max_similarity_to_source = fake_max_similarity_to_source
